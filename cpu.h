@@ -20,7 +20,7 @@ class CPU {
   uint8_t RAM[0x0800];
   uint8_t ROM[0x8000];
 
-  int cycle = 7;
+  int cycles = 7;
   bool done = false;
 
   CPU(Cartridge& cartridge);

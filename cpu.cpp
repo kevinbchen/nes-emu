@@ -15,8 +15,6 @@ CPU::CPU(Cartridge& cartridge) : cartridge(cartridge) {
 }
 
 void CPU::execute() {
-  print_state();
-
   // Fetch opcode, increment PC
   uint8_t op = mem_read(PC++);
 
@@ -38,7 +36,7 @@ void CPU::print_state() {
   printf(
       "%04X                                            A:%02X X:%02X Y:%02X "
       "P:%02X SP:%02X PPU:  0, 21 CYC:%d\n",
-      PC, A, X, Y, P, SP, cycle);
+      PC, A, X, Y, P, SP, cycles);
 
   /*
   printf("A=0x%02x X=0x%02x Y=0x%02x P=0x%02x SP=0x%02x PC=0x%04x\n", A, X, Y,
@@ -111,7 +109,7 @@ uint8_t CPU::stack_pop() {
 }
 
 void CPU::tick() {
-  cycle++;
+  cycles++;
 }
 
 namespace {
@@ -572,9 +570,7 @@ void CPU::ROR_A(uint16_t addr) {
 }
 
 void CPU::RTI(uint16_t addr) {
-  tick();
-  tick();
-  P = stack_pop();
+  PLP(addr);
   PC = stack_pop() | (stack_pop() << 8);
 }
 
