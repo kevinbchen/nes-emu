@@ -1,5 +1,7 @@
 #include "renderer.h"
 #include <cstdio>
+#include <unordered_map>
+#include "joypad.h"
 
 namespace {
 
@@ -50,6 +52,13 @@ unsigned int indices[] = {
     0, 2, 3   //
 };
 
+std::unordered_map<int, Button> button_mapping{
+    {GLFW_KEY_Z, Button::A},         {GLFW_KEY_X, Button::B},
+    {GLFW_KEY_ENTER, Button::Start}, {GLFW_KEY_SPACE, Button::Select},
+    {GLFW_KEY_UP, Button::Up},       {GLFW_KEY_DOWN, Button::Down},
+    {GLFW_KEY_LEFT, Button::Left},   {GLFW_KEY_RIGHT, Button::Right},
+};
+
 }  // namespace
 
 void Renderer::render() {
@@ -73,6 +82,14 @@ bool Renderer::init() {
     return false;
   }
   glfwMakeContextCurrent(window);
+
+  glfwSetWindowUserPointer(window, this);
+  auto callback = [](GLFWwindow* window, int key, int scancode, int action,
+                     int mods) {
+    static_cast<Renderer*>(glfwGetWindowUserPointer(window))
+        ->key_callback(key, scancode, action, mods);
+  };
+  glfwSetKeyCallback(window, callback);
 
 #ifndef EMSCRIPTEN
   int version = gladLoadGL(glfwGetProcAddress);
@@ -165,4 +182,15 @@ void Renderer::set_pixels(uint8_t* pixels) {
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_SIZE, SCREEN_HEIGHT, GL_RGB,
                   GL_UNSIGNED_BYTE, pixels);
+}
+
+void Renderer::key_callback(int key, int scancode, int action, int mods) {
+  // TODO: Move out of renderer?
+  if (action == GLFW_PRESS || action == GLFW_RELEASE) {
+    auto it = button_mapping.find(key);
+    if (it != button_mapping.end()) {
+      Button button = it->second;
+      nes.joypad.set_button_state(0, button, action == GLFW_PRESS);
+    }
+  }
 }

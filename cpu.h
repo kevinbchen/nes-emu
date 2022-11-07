@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cstdint>
 #include "cartridge.h"
 #include "ppu.h"

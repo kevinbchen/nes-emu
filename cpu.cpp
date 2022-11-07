@@ -14,7 +14,6 @@ CPU::CPU(NES& nes) : nes(nes) {
 
 void CPU::power_on() {
   PC = mem_read16(0xFFFC);
-  printf("%04x\n", PC);
 }
 
 void CPU::execute() {
@@ -49,7 +48,6 @@ void CPU::print_state() {
       "%04X                                            A:%02X X:%02X Y:%02X "
       "P:%02X SP:%02X PPU:  0, 21 CYC:%d\n",
       PC, A, X, Y, P, SP, cycles);
-
   /*
   printf("A=0x%02x X=0x%02x Y=0x%02x P=0x%02x SP=0x%02x PC=0x%04x\n", A, X, Y,
          P, SP, PC);*/
@@ -89,10 +87,12 @@ uint8_t CPU::mem_read(uint16_t addr) {
     return RAM[addr & 0x07FF];
   } else if (addr <= 0x3FFF) {
     // PPU registers, 8 bytes mirrored
-    return nes.ppu.reg_read(addr & 0x2007);
+    return nes.ppu.port_read(addr & 0x2007);
   } else if (addr <= 0x401F) {
     // APU and I/O registers, 32 bytes
-    // throw std::runtime_error("Unhandled CPU memory address");
+    if (addr == 0x4016 || addr == 0x4017) {
+      return nes.joypad.port_read(addr);
+    }
     return 0;
   } else {
     // ROM
@@ -111,11 +111,13 @@ void CPU::mem_write(uint16_t addr, uint8_t value) {
     RAM[addr & 0x07FF] = value;
   } else if (addr <= 0x3FFF) {
     // PPU registers, 8 bytes mirrored
-    nes.ppu.reg_write(addr & 0x2007, value);
+    nes.ppu.port_write(addr & 0x2007, value);
   } else if (addr <= 0x401F) {
     // APU and I/O registers, 32 bytes
     if (addr == 0x4014) {
       OAM_DMA(value);
+    } else if (addr == 0x4016) {
+      nes.joypad.port_write(addr, value);
     } else {
       // throw std::runtime_error("Unhandled CPU memory address");
     }

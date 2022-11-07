@@ -72,7 +72,7 @@ void PPU::mem_write(uint16_t addr, uint8_t value) {
   }
 }
 
-uint8_t PPU::reg_read(uint16_t addr) {
+uint8_t PPU::port_read(uint16_t addr) {
   switch (addr) {
     case 0x2002:
       return read_PPUSTATUS();
@@ -84,7 +84,7 @@ uint8_t PPU::reg_read(uint16_t addr) {
   return bus_latch;
 }
 
-void PPU::reg_write(uint16_t addr, uint8_t value) {
+void PPU::port_write(uint16_t addr, uint8_t value) {
   bus_latch = value;
   switch (addr) {
     case 0x2000:
@@ -220,7 +220,7 @@ bool PPU::rendering_enabled() {
 
 void PPU::render_scanline() {
   // TODO: pixel
-  uint8_t scanline_buffer[256];
+  uint8_t scanline_buffer[256 + 8];
   memset(scanline_buffer, 0x00, 256);
   if (PPUMASK.show_bg) {
     render_scanline_bg(scanline_buffer);
@@ -237,7 +237,7 @@ void PPU::render_scanline() {
   }
 }
 
-void PPU::render_scanline_bg(uint8_t scanline_buffer[256]) {
+void PPU::render_scanline_bg(uint8_t scanline_buffer[]) {
   // TODO: fine_x_scroll
   int y = scanline % 8;
   for (int i = 0; i < 32; i++) {
@@ -291,7 +291,7 @@ void PPU::render_scanline_bg(uint8_t scanline_buffer[256]) {
   vram_addr = (vram_addr & ~mask) | (temp_vram_addr & mask);
 }
 
-void PPU::render_scanline_sprites(uint8_t scanline_buffer[256]) {
+void PPU::render_scanline_sprites(uint8_t scanline_buffer[]) {
   int sprite_height = PPUCTRL.sprite_size ? 16 : 8;
   OAMEntry secondary_oam[8];
   memset(secondary_oam, 0xFF, 8 * sizeof(OAMEntry));
@@ -358,7 +358,7 @@ void PPU::render_scanline_sprites(uint8_t scanline_buffer[256]) {
       if (scanline_buffer[start_x + x] == 0) {
         scanline_buffer[start_x + x] = palette;
       } else {
-        if (x == 0 && sprite_0) {
+        if (i == 0 && sprite_0) {
           PPUSTATUS.sprite_0_hit = true;
         }
         if (priority == 0) {

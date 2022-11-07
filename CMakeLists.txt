@@ -10,6 +10,7 @@ add_subdirectory(libs/glad)
 set(SRC_FILES 
   cartridge.cpp
   cpu.cpp
+  joypad.cpp
   ppu.cpp
 )
 

@@ -19,26 +19,26 @@ class PPU {
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
 
-  uint8_t reg_read(uint16_t addr);
-  void reg_write(uint16_t addr, uint8_t value);
+  uint8_t port_read(uint16_t addr);
+  void port_write(uint16_t addr, uint8_t value);
 
   void tick();
 
   bool rendering_enabled();
   void render_scanline();
-  void render_scanline_bg(uint8_t scanline_buffer[256]);
-  void render_scanline_sprites(uint8_t scanline_buffer[256]);
+  void render_scanline_bg(uint8_t scanline_buffer[]);
+  void render_scanline_sprites(uint8_t scanline_buffer[]);
   void render_tile(int tile_index, int start_x, int start_y);
 
  private:
   NES& nes;
 
   uint8_t CIRAM[0x800];  // 2kb of Console-Internal RAM for 2 nametables
-  uint8_t CGRAM[0x1F];   // 32 bytes of Color Generator RAM (only 28 bytes used)
+  uint8_t CGRAM[32];     // 32 bytes of Color Generator RAM (only 28 bytes used)
   uint8_t OAM[256];      // 64 entries
 
   enum class MirrorMode { VERTICAL, HORIZONTAL, SINGLE, FOUR };
-  MirrorMode nt_mirror_mode = MirrorMode::SINGLE;
+  MirrorMode nt_mirror_mode = MirrorMode::VERTICAL;
 
   // registers
   /*

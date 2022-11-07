@@ -9,8 +9,7 @@
 #endif
 
 NES nes;
-Renderer renderer;
-std::chrono::system_clock::duration last_time;
+Renderer renderer(nes);
 
 void loop() {
   while (true) {
@@ -36,13 +35,6 @@ void loop() {
   }
   printf("=========================================\n");
   */
-  auto now = std::chrono::system_clock::now().time_since_epoch();
-
-  printf("%d ms\n",
-         std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time)
-             .count());
-  last_time = now;
-
   renderer.render();
 }
 
