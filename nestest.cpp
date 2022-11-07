@@ -2,17 +2,17 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include "cartridge.h"
-#include "cpu.h"
+#include "nes.h"
 
 int main(int argc, char* agv[]) {
-  Cartridge cartridge;
-  cartridge.load("nestest.nes");
-  CPU cpu(cartridge);
+  NES nes;
+  nes.cartridge.load("roms/nestest.nes");
+
+  CPU& cpu = nes.cpu;
   cpu.PC = 0xC000;
 
   // Load nestest.log
-  std::ifstream log_file("nestest.log");
+  std::ifstream log_file("roms/nestest.log");
   std::string log_line;
 
   printf("Running nestest.nes\n\n");

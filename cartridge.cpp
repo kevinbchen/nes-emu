@@ -4,8 +4,7 @@
 #include <stdexcept>
 
 void Cartridge::load(const char* filename) {
-  FILE* f = fopen(filename, "rb");
-
+  printf("Loading %s...\n", filename);
   std::ifstream file(filename, std::ios::in | std::ios::binary);
   if (!file) {
     throw std::runtime_error("Could not load cartridge file");
@@ -22,21 +21,35 @@ void Cartridge::load(const char* filename) {
   uint8_t rom_ctrl1 = header[6];
   uint8_t rom_ctrl2 = header[7];
   int num_ram_banks = std::max(1, (int)header[8]);
+  printf("PGR banks: %d\tCHR banks: %d\n", num_pgr_banks, num_chr_banks);
 
   bool has_trainer = rom_ctrl1 & 0x04;
   bool has_ram = rom_ctrl1 & 0x02;
 
   if (has_trainer) {
     // TODO
+    throw std::runtime_error("Trainer unhandled");
   }
   for (int i = 0; i < num_pgr_banks; i++) {
     file.read(reinterpret_cast<char*>(&pgr_rom_banks[i]), 0x4000);  // 16kb
   }
+
+  for (int i = 0; i < num_chr_banks; i++) {
+    file.read(reinterpret_cast<char*>(&chr_rom_banks[i]), 0x2000);  // 8kb
+  }
 }
 
-uint8_t* Cartridge::mem(uint16_t addr) {
+uint8_t Cartridge::mem_read(uint16_t addr) {
   if (addr >= 0x8000) {
-    return &(pgr_rom_banks[0][addr & 0x3FFF]);
+    return pgr_rom_banks[0][addr & 0x3FFF];
   }
-  return nullptr;
+  return 0;
 }
+
+void Cartridge::mem_write(uint16_t addr, uint8_t value) {}
+
+uint8_t Cartridge::chr_mem_read(uint16_t addr) {
+  return chr_rom_banks[0][addr & 0x1FFF];
+}
+
+void Cartridge::chr_mem_write(uint16_t addr, uint8_t value) {}

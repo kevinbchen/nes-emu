@@ -2,11 +2,14 @@
 
 #include <cstdint>
 #include "cartridge.h"
+#include "ppu.h"
+
+class NES;
 
 // 2A03 CPU
 class CPU {
  public:
-  Cartridge& cartridge;
+  NES& nes;
 
   uint8_t A;
   uint8_t X;
@@ -18,21 +21,26 @@ class CPU {
   uint8_t SP;   // stack pointer
 
   uint8_t RAM[0x0800];
-  uint8_t ROM[0x8000];
 
   int cycles = 7;
   bool done = false;
 
-  CPU(Cartridge& cartridge);
+  bool do_nmi = false;
+  bool do_irq = false;
+
+  CPU(NES& nes);
+  void power_on();
   void execute();
   void print_state();
 
-  uint8_t* mem(uint16_t addr);
   uint8_t mem_read(uint16_t addr);
   uint16_t mem_read16(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
   void stack_push(uint8_t value);
   uint8_t stack_pop();
+
+  void request_NMI();
+  void request_IRQ();
 
  private:
   enum class Flag : int { C = 0, Z, I, D, B, _, V, N };
@@ -44,6 +52,12 @@ class CPU {
   void set_n(uint8_t a);
 
   void tick();
+
+  void OAM_DMA(uint8_t addr_hi);
+
+  // interrupts
+  void NMI();
+  void IRQ(bool brk = false);
 
   // addressing
   uint16_t oops_cycle(uint16_t addr, int index);

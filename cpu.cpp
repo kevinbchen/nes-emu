@@ -1,20 +1,32 @@
 #include "cpu.h"
 #include <iostream>
 #include <stdexcept>
+#include "nes.h"
 
-CPU::CPU(Cartridge& cartridge) : cartridge(cartridge) {
+CPU::CPU(NES& nes) : nes(nes) {
   A = 0;
   X = 0;
   Y = 0;
   P = 0x24;
   SP = 0xFD;
-  // PC = (mem_read(0xFFFD) << 8) + mem_read(0xFFFC);
-
   memset(RAM, 0, 0x0800);
-  memset(ROM, 0, 0x8000);
+}
+
+void CPU::power_on() {
+  PC = mem_read16(0xFFFC);
+  printf("%04x\n", PC);
 }
 
 void CPU::execute() {
+  if (do_nmi) {
+    NMI();
+    return;
+  }
+  if (do_irq && !status(Flag::I)) {
+    IRQ();
+    return;
+  }
+
   // Fetch opcode, increment PC
   uint8_t op = mem_read(PC++);
 
@@ -70,25 +82,22 @@ void CPU::set_n(uint8_t a) {
   status(Flag::N, (bool)(a & 0x80));
 }
 
-uint8_t* CPU::mem(uint16_t addr) {
-  if (addr <= 0x1FFF) {
-    // 2KB internal RAM, 0x800 bytes mirrored 3 times
-    return &RAM[addr & 0x07FF];
-  } else if (addr <= 0x3FFF) {
-    // PPU registers, 8 bytes mirrored
-  } else if (addr <= 0x401F) {
-    // APU and I/O registers, 32 bytes
-  } else {
-    // ROM
-    // return &ROM[addr & 0x7FFF];
-    return cartridge.mem(addr);
-  }
-  return nullptr;
-}
-
 uint8_t CPU::mem_read(uint16_t addr) {
   tick();
-  return *mem(addr);
+  if (addr <= 0x1FFF) {
+    // 2KB internal RAM, 0x800 bytes mirrored 3 times
+    return RAM[addr & 0x07FF];
+  } else if (addr <= 0x3FFF) {
+    // PPU registers, 8 bytes mirrored
+    return nes.ppu.reg_read(addr & 0x2007);
+  } else if (addr <= 0x401F) {
+    // APU and I/O registers, 32 bytes
+    // throw std::runtime_error("Unhandled CPU memory address");
+    return 0;
+  } else {
+    // ROM
+    return nes.cartridge.mem_read(addr);
+  }
 }
 
 uint16_t CPU::mem_read16(uint16_t addr) {
@@ -97,7 +106,24 @@ uint16_t CPU::mem_read16(uint16_t addr) {
 
 void CPU::mem_write(uint16_t addr, uint8_t value) {
   tick();
-  *mem(addr) = value;
+  if (addr <= 0x1FFF) {
+    // 2KB internal RAM, 0x800 bytes mirrored 3 times
+    RAM[addr & 0x07FF] = value;
+  } else if (addr <= 0x3FFF) {
+    // PPU registers, 8 bytes mirrored
+    nes.ppu.reg_write(addr & 0x2007, value);
+  } else if (addr <= 0x401F) {
+    // APU and I/O registers, 32 bytes
+    if (addr == 0x4014) {
+      OAM_DMA(value);
+    } else {
+      // throw std::runtime_error("Unhandled CPU memory address");
+    }
+  } else {
+    // ROM
+    // TODO
+    nes.cartridge.mem_write(addr, value);
+  }
 }
 
 void CPU::stack_push(uint8_t value) {
@@ -109,85 +135,51 @@ uint8_t CPU::stack_pop() {
 }
 
 void CPU::tick() {
+  nes.ppu.tick();
+  nes.ppu.tick();
+  nes.ppu.tick();
   cycles++;
 }
 
-namespace {
-enum AddrMode {
-  Imp,
-  Acc,
-  Imm,
-  Zp,
-  ZpX,
-  ZpY,
-  Abs,
-  AbsX,
-  AbsY,
-  Ind,
-  IndX,
-  IndY,
-  Rel,
-};
+void CPU::request_NMI() {
+  do_nmi = true;
+}
 
-AddrMode get_addr_mode(uint8_t op) {
-  // See table https://www.nesdev.org/wiki/CPU_unofficial_opcodes
+void CPU::request_IRQ() {
+  do_irq = true;
+}
 
-  uint8_t top = op & 0xE0;     // top 3 bits
-  uint8_t bottom = op & 0x1F;  // bottom 5 bits
+void CPU::NMI() {
+  stack_push(PC >> 8);
+  stack_push(PC & 0xFF);
+  stack_push(P);
+  status(Flag::I, true);
+  tick();
+  do_nmi = false;
+  PC = mem_read16(0xFFFA);
+}
 
-  switch (bottom) {
-    case 0x00:
-    case 0x02:
-      return top < 0x80 ? AddrMode::Imp : AddrMode::Imm;
-    case 0x01:
-    case 0x03:
-      return AddrMode::IndX;
-    case 0x04:
-    case 0x05:
-    case 0x06:
-    case 0x07:
-      return AddrMode::Zp;
-    case 0x09:
-    case 0x0B:
-      return AddrMode::Imm;
-    case 0x0C:
-    case 0x0D:
-    case 0x0E:
-    case 0x0F:
-      return (op == 0x60) ? AddrMode::Ind : AddrMode::Acc;
-    case 0x10:
-      return AddrMode::Rel;
-    case 0x11:
-    case 0x13:
-      return AddrMode::IndY;
-    case 0x14:
-    case 0x15:
-      return AddrMode::ZpX;
-    case 0x16:
-    case 0x17:
-      return (top == 0x80 || top == 0xA0) ? AddrMode::ZpY : AddrMode::ZpX;
-    case 0x19:
-    case 0x1B:
-      return AddrMode::AbsY;
-    case 0x1C:
-    case 0x1D:
-      return AddrMode::AbsX;
-    case 0x1E:
-    case 0x1F:
-      return (top == 0x80 || top == 0xA0) ? AddrMode::AbsY : AddrMode::AbsX;
+void CPU::IRQ(bool brk) {
+  stack_push(PC >> 8);
+  stack_push(PC & 0xFF);
+  stack_push(P | (brk ? 0x10 : 0x00));
+  status(Flag::I, true);
+  do_nmi = false;
+  tick();
+  if (!brk) {
+    tick();
+  }
+  PC = mem_read16(0xFFFE);
+}
 
-    case 0x08:
-    case 0x0A:
-    case 0x12:
-    case 0x18:
-    case 0x1A:
-      return AddrMode::Imp;
-
-    default:
-      throw std::runtime_error("Could not determine addressing mode");
+void CPU::OAM_DMA(uint8_t addr_hi) {
+  // TODO: handle odd extra cycle
+  uint16_t addr = addr_hi << 8;
+  for (int i = 0; i < 256; i++) {
+    // Simulate with an OAMDATA write to the ppu
+    mem_write(0x2004, mem_read(addr + i));
   }
 }
-}  // namespace
 
 uint16_t CPU::oops_cycle(uint16_t addr, int index) {
   if (((addr + index) & 0xFF00) != (addr & 0xFF00)) {
@@ -370,9 +362,7 @@ void CPU::BPL(uint16_t addr) {
 }
 
 void CPU::BRK(uint16_t addr) {
-  // TODO
-  status(Flag::B, true);
-  done = true;
+  IRQ(true);
 }
 
 void CPU::BVC(uint16_t addr) {
