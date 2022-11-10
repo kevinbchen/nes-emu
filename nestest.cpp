@@ -29,8 +29,8 @@ int main(int argc, char* agv[]) {
 
     printf("%s\n", log_line.c_str());
 
-    if (cpu.PC != PC || cpu.A != A || cpu.X != X || cpu.Y != Y || cpu.P != P ||
-        cpu.SP != SP || cpu.cycles != cycles) {
+    if (cpu.PC != PC || cpu.A != A || cpu.X != X || cpu.Y != Y ||
+        cpu.P.raw != P || cpu.SP != SP || cpu.cycles != cycles) {
       printf("ERROR: Mismatch found:\n");
       cpu.print_state();
       break;

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "BitField.h"
 
 struct OAMEntry {
   uint8_t y;
@@ -41,48 +42,50 @@ class PPU {
   MirrorMode nt_mirror_mode = MirrorMode::VERTICAL;
 
   // registers
-  /*
-  struct Addr {
-    uint8_t coarse_x_scroll : 5;
-    uint8_t coarse_y_scroll : 5;
-    uint8_t nt_select : 2;
-    uint8_t fine_y_scroll : 3;
-  };*/
+  union Addr {
+    uint16_t raw;
+    BitField16<0, 5> coarse_x_scroll;
+    BitField16<5, 5> coarse_y_scroll;
+    BitField16<10, 2> nt_select;
+    BitField16<12, 3> fine_y_scroll;
+  };
 
-  uint16_t vram_addr;
-  uint16_t temp_vram_addr;
+  Addr vram_addr;
+  Addr temp_vram_addr;
   uint8_t fine_x_scroll;
   bool write_toggle = false;
-
   uint8_t bus_latch;
 
-  struct {
-    uint8_t nt_addr : 2;
-    uint8_t addr_increment : 1;
-    uint8_t sprite_pt_addr : 1;
-    uint8_t bg_pt_addr : 1;
-    uint8_t sprite_size : 1;
-    uint8_t ss : 1;
-    uint8_t nmi : 1;
+  union {
+    uint8_t raw;
+    BitField8<0, 2> nt_addr;
+    BitField8<2, 1> addr_increment;
+    BitField8<3, 1> sprite_pt_addr;
+    BitField8<4, 1> bg_pt_addr;
+    BitField8<5, 1> sprite_size;
+    BitField8<6, 1> ss;
+    BitField8<7, 1> nmi;
   } PPUCTRL;
   void write_PPUCTRL(uint8_t value);
 
-  struct {
-    uint8_t greyscale : 1;
-    uint8_t show_bg_left8 : 1;
-    uint8_t show_sprites_left8 : 1;
-    uint8_t show_bg : 1;
-    uint8_t show_sprites : 1;
-    uint8_t tint_red : 1;
-    uint8_t tint_green : 1;
-    uint8_t tint_blue : 1;
+  union {
+    uint8_t raw;
+    BitField8<0, 1> greyscale;
+    BitField8<1, 1> show_bg_left8;
+    BitField8<2, 1> show_sprites_left8;
+    BitField8<3, 1> show_bg;
+    BitField8<4, 1> show_sprites;
+    BitField8<5, 1> tint_red;
+    BitField8<6, 1> tint_green;
+    BitField8<7, 1> tint_blue;
   } PPUMASK;
   void write_PPUMASK(uint8_t value);
 
-  struct {
-    uint8_t sprite_overflow : 1;
-    uint8_t sprite_0_hit : 1;
-    uint8_t in_vblank : 1;
+  union {
+    uint8_t raw;
+    BitField8<5, 1> sprite_overflow;
+    BitField8<6, 1> sprite_0_hit;
+    BitField8<7, 1> in_vblank;
   } PPUSTATUS;
   uint8_t read_PPUSTATUS();
 

@@ -108,76 +108,61 @@ void PPU::port_write(uint16_t addr, uint8_t value) {
 
 void PPU::write_PPUCTRL(uint8_t value) {
   uint8_t old_nmi = PPUCTRL.nmi;
-  PPUCTRL.nt_addr = value & 0x3;
-  PPUCTRL.addr_increment = (value >> 2) & 0x1;
-  PPUCTRL.sprite_pt_addr = (value >> 3) & 0x1;
-  PPUCTRL.bg_pt_addr = (value >> 4) & 0x1;
-  PPUCTRL.sprite_size = (value >> 5) & 0x1;
-  PPUCTRL.ss = (value >> 6) & 0x1;
-  PPUCTRL.nmi = (value >> 7) & 0x1;
+  PPUCTRL.raw = value;
   if (PPUSTATUS.in_vblank == 1 && PPUCTRL.nmi == 1 && old_nmi == 0) {
     nes.cpu.request_NMI();
   }
-
-  temp_vram_addr = (temp_vram_addr & 0xF3FF) | (PPUCTRL.nt_addr << 10);
+  temp_vram_addr.nt_select = PPUCTRL.nt_addr;
 }
 
 void PPU::write_PPUMASK(uint8_t value) {
-  PPUMASK.greyscale = value & 0x3;
-  PPUMASK.show_bg_left8 = (value >> 1) & 0x1;
-  PPUMASK.show_sprites_left8 = (value >> 2) & 0x1;
-  PPUMASK.show_bg = (value >> 3) & 0x1;
-  PPUMASK.show_sprites = (value >> 4) & 0x1;
-  PPUMASK.tint_red = (value >> 5) & 0x1;
-  PPUMASK.tint_green = (value >> 6) & 0x1;
-  PPUMASK.tint_blue = (value >> 7) & 0x1;
+  PPUMASK.raw = value;
 }
 
 uint8_t PPU::read_PPUSTATUS() {
   write_toggle = false;
-  uint8_t value = (bus_latch & 0x1F) | (PPUSTATUS.sprite_overflow << 5) |
-                  (PPUSTATUS.sprite_0_hit << 6) | (PPUSTATUS.in_vblank << 7);
+  uint8_t value = (bus_latch & 0x1F) | (PPUSTATUS.raw & 0xE0);
   PPUSTATUS.in_vblank = 0;
   return value;
 }
 
 void PPU::write_PPUSCROLL(uint8_t value) {
   if (!write_toggle) {
-    temp_vram_addr = (temp_vram_addr & 0xFFE0) | (value >> 3);
+    temp_vram_addr.coarse_x_scroll = value >> 3;
     fine_x_scroll = value & 0x07;
   } else {
-    temp_vram_addr = (temp_vram_addr & 0x0C1F) | ((value & 0xF8) << 2) |
-                     ((value & 0x07) << 12);
+    temp_vram_addr.coarse_y_scroll = value >> 3;
+    temp_vram_addr.fine_y_scroll = value & 0x07;
   }
   write_toggle = !write_toggle;
 }
 
 void PPU::write_PPUADDR(uint8_t value) {
   if (!write_toggle) {
-    temp_vram_addr = (temp_vram_addr & 0x00FF) | ((value & 0x3F) << 8);
+    temp_vram_addr.raw = (temp_vram_addr.raw & 0x00FF) | ((value & 0x3F) << 8);
   } else {
-    temp_vram_addr = (temp_vram_addr & 0xFF00) | value;
-    vram_addr = temp_vram_addr;
+    temp_vram_addr.raw = (temp_vram_addr.raw & 0xFF00) | value;
+    vram_addr.raw = temp_vram_addr.raw;
   }
   write_toggle = !write_toggle;
 }
 
 uint8_t PPU::read_PPUDATA() {
   uint8_t value;
-  if (vram_addr <= 0x3EFF) {
+  if (vram_addr.raw <= 0x3EFF) {
     value = data_buffer;
-    data_buffer = mem_read(vram_addr);
+    data_buffer = mem_read(vram_addr.raw);
   } else {
-    value = mem_read(vram_addr);
-    data_buffer = mem_read(vram_addr - 0x1000);
+    value = mem_read(vram_addr.raw);
+    data_buffer = mem_read(vram_addr.raw - 0x1000);
   }
-  vram_addr += PPUCTRL.addr_increment ? 32 : 1;
+  vram_addr.raw += PPUCTRL.addr_increment ? 32 : 1;
   return value;
 }
 
 void PPU::write_PPUDATA(uint8_t value) {
-  mem_write(vram_addr, value);
-  vram_addr += PPUCTRL.addr_increment ? 32 : 1;
+  mem_write(vram_addr.raw, value);
+  vram_addr.raw += PPUCTRL.addr_increment ? 32 : 1;
 }
 
 void PPU::tick() {
@@ -194,8 +179,10 @@ void PPU::tick() {
       PPUSTATUS.sprite_overflow = 0;
     } else if (scanline_cycle >= 280 && scanline_cycle <= 304) {
       if (rendering_enabled()) {
-        const int mask = 0xFBE0;
-        vram_addr = (vram_addr & ~0xFBE0) | (temp_vram_addr & mask);
+        vram_addr.coarse_y_scroll = temp_vram_addr.coarse_y_scroll;
+        vram_addr.fine_y_scroll = temp_vram_addr.fine_y_scroll;
+        vram_addr.nt_select =
+            (vram_addr.nt_select & 0x1) | (temp_vram_addr.nt_select & 0x2);
       }
     }
   }
@@ -241,16 +228,18 @@ void PPU::render_scanline_bg(uint8_t scanline_buffer[]) {
   // TODO: fine_x_scroll
   int y = scanline % 8;
   for (int i = 0; i < 32; i++) {
-    uint16_t nt_addr = 0x2000 | (vram_addr & 0x0FFF);
+    uint16_t nt_addr = 0x2000 | (vram_addr.raw & 0x0FFF);
     uint8_t tile_index = mem_read(nt_addr);
     uint16_t pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (tile_index << 4);
     uint8_t color_lo = mem_read(pt_addr_base | y);
     uint8_t color_hi = mem_read(pt_addr_base | 0x0008 | y);
 
-    uint16_t at_addr = 0x23C0 | (vram_addr & 0x0C00) |
-                       ((vram_addr >> 4) & 0x38) | ((vram_addr >> 2) & 0x07);
+    uint16_t at_addr = 0x23C0 | (vram_addr.nt_select << 10) |
+                       ((vram_addr.coarse_y_scroll >> 2) << 3) |
+                       (vram_addr.coarse_x_scroll >> 2);
+    int at_shift = (vram_addr.coarse_x_scroll & 0x0002) |
+                   ((vram_addr.coarse_y_scroll & 0x0002) << 1);
 
-    int at_shift = (vram_addr & 0x0002) | ((vram_addr >> 4) & 0x0004);
     uint8_t palette_index = (mem_read(at_addr) >> at_shift) & 0x03;
 
     int start_x = i * 8;
@@ -266,29 +255,28 @@ void PPU::render_scanline_bg(uint8_t scanline_buffer[]) {
     }
 
     // Increment x
-    vram_addr = (vram_addr & 0xFFE0) | ((vram_addr + 1) & 0x001F);
+    vram_addr.coarse_x_scroll++;
   }
 
   // Increment y
-  if ((vram_addr & 0x7000) != 0x7000) {
-    vram_addr += 0x1000;
+  if (vram_addr.fine_y_scroll != 0x0007) {
+    vram_addr.fine_y_scroll++;
   } else {
-    vram_addr &= ~0x7000;
-    int coarse_y = (vram_addr & 0x03E0) >> 5;
-    if (coarse_y == 29) {
-      coarse_y = 0;
-      vram_addr ^= 0x0800;
-    } else if (coarse_y == 31) {
-      coarse_y = 0;
+    vram_addr.fine_y_scroll = 0;
+    if (vram_addr.coarse_y_scroll == 29) {
+      vram_addr.coarse_y_scroll = 0;
+      vram_addr.nt_select = vram_addr.nt_select + 2;
+    } else if (vram_addr.coarse_y_scroll == 31) {
+      vram_addr.coarse_y_scroll = 0;
     } else {
-      coarse_y++;
+      vram_addr.coarse_y_scroll++;
     }
-    vram_addr = (vram_addr & ~0x03E0) | (coarse_y << 5);
   }
 
   // Reset x
-  const int mask = 0x041F;
-  vram_addr = (vram_addr & ~mask) | (temp_vram_addr & mask);
+  vram_addr.coarse_x_scroll = temp_vram_addr.coarse_x_scroll;
+  vram_addr.nt_select =
+      (vram_addr.nt_select & 0x2) | (temp_vram_addr.nt_select & 0x1);
 }
 
 void PPU::render_scanline_sprites(uint8_t scanline_buffer[]) {
@@ -359,7 +347,7 @@ void PPU::render_scanline_sprites(uint8_t scanline_buffer[]) {
         scanline_buffer[start_x + x] = palette;
       } else {
         if (i == 0 && sprite_0) {
-          PPUSTATUS.sprite_0_hit = true;
+          PPUSTATUS.sprite_0_hit = 1;
         }
         if (priority == 0) {
           scanline_buffer[start_x + x] = palette;

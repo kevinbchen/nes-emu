@@ -7,7 +7,7 @@ CPU::CPU(NES& nes) : nes(nes) {
   A = 0;
   X = 0;
   Y = 0;
-  P = 0x24;
+  P.raw = 0x24;
   SP = 0xFD;
   memset(RAM, 0, 0x0800);
 }
@@ -21,7 +21,7 @@ void CPU::execute() {
     NMI();
     return;
   }
-  if (do_irq && !status(Flag::I)) {
+  if (do_irq && !P.I) {
     IRQ();
     return;
   }
@@ -47,24 +47,15 @@ void CPU::print_state() {
   printf(
       "%04X                                            A:%02X X:%02X Y:%02X "
       "P:%02X SP:%02X PPU:  0, 21 CYC:%d\n",
-      PC, A, X, Y, P, SP, cycles);
+      PC, A, X, Y, P.raw, SP, cycles);
   /*
   printf("A=0x%02x X=0x%02x Y=0x%02x P=0x%02x SP=0x%02x PC=0x%04x\n", A, X, Y,
          P, SP, PC);*/
 }
 
-uint8_t CPU::status(Flag f) {
-  return (P >> (int)f) & 0x1;
-}
-
-void CPU::status(Flag f, bool value) {
-  uint8_t mask = 1 << (int)f;
-  P = (P & ~mask) | (value << (int)f);
-}
-
 void CPU::set_cv(uint8_t a, uint8_t b, uint16_t res) {
-  status(Flag::C, res > 0xFF);
-  status(Flag::V, (bool)((a ^ res) & (b ^ res) & 0x80));
+  P.C = res > 0xFF;
+  P.V = (bool)((a ^ res) & (b ^ res) & 0x80);
 }
 
 void CPU::set_zn(uint8_t a) {
@@ -73,11 +64,11 @@ void CPU::set_zn(uint8_t a) {
 }
 
 void CPU::set_z(uint8_t a) {
-  status(Flag::Z, a == 0);
+  P.Z = a == 0;
 }
 
 void CPU::set_n(uint8_t a) {
-  status(Flag::N, (bool)(a & 0x80));
+  P.N = (bool)(a & 0x80);
 }
 
 uint8_t CPU::mem_read(uint16_t addr) {
@@ -154,8 +145,8 @@ void CPU::request_IRQ() {
 void CPU::NMI() {
   stack_push(PC >> 8);
   stack_push(PC & 0xFF);
-  stack_push(P);
-  status(Flag::I, true);
+  stack_push(P.raw);
+  P.I = true;
   tick();
   do_nmi = false;
   PC = mem_read16(0xFFFA);
@@ -164,8 +155,8 @@ void CPU::NMI() {
 void CPU::IRQ(bool brk) {
   stack_push(PC >> 8);
   stack_push(PC & 0xFF);
-  stack_push(P | (brk ? 0x10 : 0x00));
-  status(Flag::I, true);
+  stack_push(P.raw | (brk ? 0x10 : 0x00));
+  P.I = true;
   do_nmi = false;
   tick();
   if (!brk) {
@@ -283,15 +274,10 @@ void CPU::branch(uint16_t addr, bool cond) {
   }
 }
 
-void CPU::flag(Flag f, bool value) {
-  tick();
-  status(f, value);
-}
-
 void CPU::cmp(uint16_t addr, uint8_t reg) {
   uint8_t value = mem_read(addr);
   uint8_t res = reg - value;
-  status(Flag::C, reg >= value);
+  P.C = reg >= value;
   set_zn(res);
 }
 
@@ -302,10 +288,10 @@ void CPU::UNIMPL(uint16_t addr) {
 
 void CPU::ADC(uint16_t addr) {
   uint8_t value = mem_read(addr);
-  int16_t sum = A + value + status(Flag::C);
+  int16_t sum = A + value + P.C;
   set_cv(A, value, sum);
-  set_zn(sum);
-  A = sum;
+  set_zn((uint8_t)sum);
+  A = (uint8_t)sum;
 }
 
 void CPU::AND(uint16_t addr) {
@@ -318,7 +304,7 @@ void CPU::ASL(uint16_t addr) {
   uint8_t value = mem_read(addr);
   tick();
   uint8_t res = value << 1;
-  status(Flag::C, (bool)(value & 0x80));
+  P.C = (bool)(value & 0x80);
   set_zn(res);
   mem_write(addr, res);
 }
@@ -326,21 +312,21 @@ void CPU::ASL(uint16_t addr) {
 void CPU::ASL_A(uint16_t addr) {
   tick();
   uint8_t res = A << 1;
-  status(Flag::C, (bool)(A & 0x80));
+  P.C = (bool)(A & 0x80);
   set_zn(res);
   A = res;
 }
 
 void CPU::BCC(uint16_t addr) {
-  branch(addr, status(Flag::C) == 0);
+  branch(addr, P.C == 0);
 }
 
 void CPU::BCS(uint16_t addr) {
-  branch(addr, status(Flag::C) == 1);
+  branch(addr, P.C == 1);
 }
 
 void CPU::BEQ(uint16_t addr) {
-  branch(addr, status(Flag::Z) == 1);
+  branch(addr, P.Z == 1);
 }
 
 void CPU::BIT(uint16_t addr) {
@@ -348,19 +334,19 @@ void CPU::BIT(uint16_t addr) {
   uint8_t res = A & value;
   set_z(res);
   set_n(value);
-  status(Flag::V, (bool)(value & 0x40));
+  P.V = (bool)(value & 0x40);
 }
 
 void CPU::BMI(uint16_t addr) {
-  branch(addr, status(Flag::N) == 1);
+  branch(addr, P.N == 1);
 }
 
 void CPU::BNE(uint16_t addr) {
-  branch(addr, status(Flag::Z) == 0);
+  branch(addr, P.Z == 0);
 }
 
 void CPU::BPL(uint16_t addr) {
-  branch(addr, status(Flag::N) == 0);
+  branch(addr, P.N == 0);
 }
 
 void CPU::BRK(uint16_t addr) {
@@ -368,27 +354,31 @@ void CPU::BRK(uint16_t addr) {
 }
 
 void CPU::BVC(uint16_t addr) {
-  branch(addr, status(Flag::V) == 0);
+  branch(addr, P.V == 0);
 }
 
 void CPU::BVS(uint16_t addr) {
-  branch(addr, status(Flag::V) == 1);
+  branch(addr, P.V == 1);
 }
 
 void CPU::CLC(uint16_t addr) {
-  flag(Flag::C, 0);
+  tick();
+  P.C = 0;
 }
 
 void CPU::CLD(uint16_t addr) {
-  flag(Flag::D, 0);
+  tick();
+  P.D = 0;
 }
 
 void CPU::CLI(uint16_t addr) {
-  flag(Flag::I, 0);
+  tick();
+  P.I = 0;
 }
 
 void CPU::CLV(uint16_t addr) {
-  flag(Flag::V, 0);
+  tick();
+  P.V = 0;
 }
 
 void CPU::CMP(uint16_t addr) {
@@ -480,7 +470,7 @@ void CPU::LSR(uint16_t addr) {
   uint8_t value = mem_read(addr);
   tick();
   uint8_t res = value >> 1;
-  status(Flag::C, (bool)(value & 0x01));
+  P.C = (bool)(value & 0x01);
   set_zn(res);
   mem_write(addr, res);
 }
@@ -488,7 +478,7 @@ void CPU::LSR(uint16_t addr) {
 void CPU::LSR_A(uint16_t addr) {
   tick();
   uint8_t res = A >> 1;
-  status(Flag::C, (bool)(A & 0x01));
+  P.C = (bool)(A & 0x01);
   set_zn(res);
   A = res;
 }
@@ -510,7 +500,7 @@ void CPU::PHA(uint16_t addr) {
 
 void CPU::PHP(uint16_t addr) {
   tick();
-  stack_push(P | 0x30);  // bits 4 and 5 set
+  stack_push(P.raw | 0x30);  // bits 4 and 5 set
 }
 
 void CPU::PLA(uint16_t addr) {
@@ -524,22 +514,22 @@ void CPU::PLP(uint16_t addr) {
   tick();
   tick();
   // Always treat bit 5 as 1 and bit 4 as 0
-  P = (stack_pop() & ~0x30) | 0x20;
+  P.raw = (stack_pop() & ~0x30) | 0x20;
 }
 
 void CPU::ROL(uint16_t addr) {
   uint8_t value = mem_read(addr);
   tick();
-  uint8_t res = (value << 1) | status(Flag::C);
-  status(Flag::C, (bool)(value & 0x80));
+  uint8_t res = (value << 1) | P.C;
+  P.C = (bool)(value & 0x80);
   set_zn(res);
   mem_write(addr, res);
 }
 
 void CPU::ROL_A(uint16_t addr) {
   tick();
-  uint8_t res = (A << 1) | status(Flag::C);
-  status(Flag::C, (bool)(A & 0x80));
+  uint8_t res = (A << 1) | P.C;
+  P.C = (bool)(A & 0x80);
   set_zn(res);
   A = res;
 }
@@ -547,16 +537,16 @@ void CPU::ROL_A(uint16_t addr) {
 void CPU::ROR(uint16_t addr) {
   uint8_t value = mem_read(addr);
   tick();
-  uint8_t res = (value >> 1) | (status(Flag::C) << 7);
-  status(Flag::C, (bool)(value & 0x01));
+  uint8_t res = (value >> 1) | (P.C << 7);
+  P.C = (bool)(value & 0x01);
   set_zn(res);
   mem_write(addr, res);
 }
 
 void CPU::ROR_A(uint16_t addr) {
   tick();
-  uint8_t res = (A >> 1) | (status(Flag::C) << 7);
-  status(Flag::C, (bool)(A & 0x01));
+  uint8_t res = (A >> 1) | (P.C << 7);
+  P.C = (bool)(A & 0x01);
   set_zn(res);
   A = res;
 }
@@ -575,22 +565,25 @@ void CPU::RTS(uint16_t addr) {
 
 void CPU::SBC(uint16_t addr) {
   uint8_t value = ~mem_read(addr);  // 1s complement of operand
-  int16_t sum = A + value + status(Flag::C);
+  int16_t sum = A + value + P.C;
   set_cv(A, value, sum);
-  set_zn(sum);
-  A = sum;
+  set_zn((uint8_t)sum);
+  A = (uint8_t)sum;
 }
 
 void CPU::SEC(uint16_t addr) {
-  flag(Flag::C, 1);
+  tick();
+  P.C = 1;
 }
 
 void CPU::SED(uint16_t addr) {
-  flag(Flag::D, 1);
+  tick();
+  P.D = 1;
 }
 
 void CPU::SEI(uint16_t addr) {
-  flag(Flag::I, 1);
+  tick();
+  P.I = 1;
 }
 
 void CPU::STA(uint16_t addr) {

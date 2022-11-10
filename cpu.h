@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "bitfield.h"
 #include "cartridge.h"
 #include "ppu.h"
 
@@ -13,11 +14,20 @@ class CPU {
   uint8_t A;
   uint8_t X;
   uint8_t Y;
-  uint8_t P;    // status
-                // 7 6 5 4 3 2 1 0
-                // N V _ B D I Z C
   uint16_t PC;  // program counter
   uint8_t SP;   // stack pointer
+
+  // status
+  union {
+    uint8_t raw;
+    BitField8<0, 1> C;
+    BitField8<1, 1> Z;
+    BitField8<2, 1> I;
+    BitField8<3, 1> D;
+    BitField8<4, 1> B;
+    BitField8<6, 1> V;
+    BitField8<7, 1> N;
+  } P;
 
   uint8_t RAM[0x0800];
 
@@ -43,8 +53,6 @@ class CPU {
 
  private:
   enum class Flag : int { C = 0, Z, I, D, B, _, V, N };
-  uint8_t status(Flag f);
-  void status(Flag f, bool value);
   void set_cv(uint8_t a, uint8_t b, uint16_t res);
   void set_zn(uint8_t a);
   void set_z(uint8_t a);
@@ -79,7 +87,6 @@ class CPU {
 
   // instructions
   void branch(uint16_t addr, bool cond);
-  void flag(Flag f, bool value);
   void cmp(uint16_t addr, uint8_t reg);
 
   void UNIMPL(uint16_t addr);
