@@ -13,4 +13,10 @@ class NES {
   PPU ppu;
   Cartridge cartridge;
   Joypad joypad;
+
+  void load(const char* filename) {
+    cartridge.load(filename);
+    cpu.power_on();
+    ppu.power_on();
+  }
 };

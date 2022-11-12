@@ -3,17 +3,17 @@
 #include <stdexcept>
 #include "nes.h"
 
-CPU::CPU(NES& nes) : nes(nes) {
+CPU::CPU(NES& nes) : nes(nes) {}
+
+void CPU::power_on() {
   A = 0;
   X = 0;
   Y = 0;
   P.raw = 0x24;
   SP = 0xFD;
   memset(RAM, 0, 0x0800);
-}
-
-void CPU::power_on() {
   PC = mem_read16(0xFFFC);
+  cycles = 7;
 }
 
 void CPU::execute() {

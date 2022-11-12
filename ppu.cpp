@@ -5,6 +5,18 @@
 
 PPU::PPU(NES& nes) : nes(nes) {}
 
+void PPU::power_on() {
+  scanline = 0;
+  scanline_cycle = 0;
+  odd_frame = false;
+  frame_ready = false;
+
+  PPUCTRL.raw = 0x00;
+  PPUMASK.raw = 0x00;
+  PPUSTATUS.raw = 0x00;
+  memset(pixels, 0x00, 240 * 256 * 3);
+}
+
 uint16_t PPU::nt_mirror_addr(uint16_t addr) {
   switch (nt_mirror_mode) {
     case MirrorMode::HORIZONTAL:

@@ -84,12 +84,17 @@ bool Renderer::init() {
   glfwMakeContextCurrent(window);
 
   glfwSetWindowUserPointer(window, this);
-  auto callback = [](GLFWwindow* window, int key, int scancode, int action,
-                     int mods) {
+  auto key_callback = [](GLFWwindow* window, int key, int scancode, int action,
+                         int mods) {
     static_cast<Renderer*>(glfwGetWindowUserPointer(window))
         ->key_callback(key, scancode, action, mods);
   };
-  glfwSetKeyCallback(window, callback);
+  auto drop_callback = [](GLFWwindow* window, int count, const char** paths) {
+    static_cast<Renderer*>(glfwGetWindowUserPointer(window))
+        ->drop_callback(count, paths);
+  };
+  glfwSetKeyCallback(window, key_callback);
+  glfwSetDropCallback(window, drop_callback);
 
 #ifndef EMSCRIPTEN
   int version = gladLoadGL(glfwGetProcAddress);
@@ -193,4 +198,8 @@ void Renderer::key_callback(int key, int scancode, int action, int mods) {
       nes.joypad.set_button_state(0, button, action == GLFW_PRESS);
     }
   }
+}
+
+void Renderer::drop_callback(int count, const char** paths) {
+  nes.load(paths[0]);
 }

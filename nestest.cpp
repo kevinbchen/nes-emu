@@ -6,7 +6,7 @@
 
 int main(int argc, char* agv[]) {
   NES nes;
-  nes.cartridge.load("roms/nestest.nes");
+  nes.load("roms/nestest.nes");
 
   CPU& cpu = nes.cpu;
   cpu.PC = 0xC000;

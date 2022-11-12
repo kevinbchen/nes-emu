@@ -17,10 +17,11 @@ enum class MirrorMode { VERTICAL, HORIZONTAL, SINGLE, FOUR };
 class NES;
 class PPU {
  public:
-  uint8_t pixels[256][256][3];  // y, x, c
+  uint8_t pixels[240][256][3];  // y, x, c
   bool frame_ready = false;
 
   PPU(NES& nes);
+  void power_on();
 
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);

@@ -36,4 +36,5 @@ class Renderer {
   unsigned int shader_program;
 
   void key_callback(int key, int scancode, int action, int mods);
+  void drop_callback(int count, const char** paths);
 };

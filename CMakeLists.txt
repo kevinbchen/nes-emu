@@ -21,7 +21,9 @@ if (EMSCRIPTEN)
   set_target_properties(nes-emu
         PROPERTIES SUFFIX ".html"
         COMPILE_FLAGS "-fexceptions"
-        LINK_FLAGS "-s USE_GLFW=3 -s USE_WEBGL2=1 -fexceptions --preload-file ${CMAKE_SOURCE_DIR}/roms@/roms --shell-file ${CMAKE_SOURCE_DIR}/template.html ")
+        LINK_FLAGS "-s USE_GLFW=3 -s USE_WEBGL2=1 -fexceptions \
+                    --preload-file ${CMAKE_SOURCE_DIR}/roms/nestest.nes@/roms/nestest.nes \
+                    --shell-file ${CMAKE_SOURCE_DIR}/template.html")
 else()
   include(FetchContent)
   set(FETCHCONTENT_QUIET FALSE)
