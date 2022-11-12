@@ -3,10 +3,13 @@
 #include "BitField.h"
 
 struct OAMEntry {
+  uint8_t id;
   uint8_t y;
   uint8_t tile;
   uint8_t attributes;
   uint8_t x;
+  uint8_t data_hi;
+  uint8_t data_lo;
 };
 
 class NES;
@@ -19,16 +22,13 @@ class PPU {
 
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
-
   uint8_t port_read(uint16_t addr);
   void port_write(uint16_t addr, uint8_t value);
 
   void tick();
-
   bool rendering_enabled();
+  void render_pixel();
   void render_scanline();
-  void render_scanline_bg(uint8_t scanline_buffer[]);
-  void render_scanline_sprites(uint8_t scanline_buffer[]);
   void render_tile(int tile_index, int start_x, int start_y);
 
  private:
@@ -40,6 +40,7 @@ class PPU {
 
   enum class MirrorMode { VERTICAL, HORIZONTAL, SINGLE, FOUR };
   MirrorMode nt_mirror_mode = MirrorMode::VERTICAL;
+  uint16_t nt_mirror_addr(uint16_t addr);
 
   // registers
   union Addr {
@@ -101,6 +102,22 @@ class PPU {
   // state
   int scanline = 0;
   int scanline_cycle = 0;
+  bool odd_frame = false;
 
-  uint16_t nt_mirror_addr(uint16_t addr);
+  // For pairs, 0-index is the lo bit/byte
+  uint8_t at_shift_register[2];
+  uint8_t at_latch[2];
+  uint16_t pt_shift_register[2];
+  uint8_t nt_byte;
+  uint8_t at_byte;
+  uint8_t pt_byte[2];
+  void update_shift_registers();
+  void reload_shift_registers();
+
+  OAMEntry secondary_oam[8];
+  OAMEntry rendering_oam[8];
+
+  void clear_secondary_oam();
+  void evaluate_sprites();
+  void load_rendering_oam();
 };

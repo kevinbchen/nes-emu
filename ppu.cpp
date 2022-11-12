@@ -166,13 +166,16 @@ void PPU::write_PPUDATA(uint8_t value) {
 }
 
 void PPU::tick() {
-  scanline_cycle++;
-  if (scanline == 241 && scanline_cycle == 1) {
+  if (scanline <= 239) {
+    // Visible line
+    render_scanline();
+  } else if (scanline == 241 && scanline_cycle == 1) {
     PPUSTATUS.in_vblank = 1;
     if (PPUCTRL.nmi == 1) {
       nes.cpu.request_NMI();
     }
   } else if (scanline == 261) {
+    render_scanline();
     if (scanline_cycle == 1) {
       PPUSTATUS.in_vblank = 0;
       PPUSTATUS.sprite_0_hit = 0;
@@ -184,19 +187,21 @@ void PPU::tick() {
         vram_addr.nt_select =
             (vram_addr.nt_select & 0x1) | (temp_vram_addr.nt_select & 0x2);
       }
-    }
-  }
-  if (scanline_cycle >= 341) {
-    scanline_cycle = 0;
-    if (scanline <= 239) {
-      if (rendering_enabled()) {
-        render_scanline();
+    } else if (scanline_cycle == 340) {
+      if (odd_frame && rendering_enabled()) {
+        // Skip next idle cycle
+        scanline_cycle++;
       }
     }
+  }
+  scanline_cycle++;
+  if (scanline_cycle >= 341) {
+    scanline_cycle = scanline_cycle % 340;  // modulo for the odd frame case
     scanline++;
     if (scanline > 261) {
       scanline = 0;
       frame_ready = true;
+      odd_frame = !odd_frame;
     }
   }
 }
@@ -205,156 +210,218 @@ bool PPU::rendering_enabled() {
   return PPUMASK.show_bg || PPUMASK.show_sprites;
 }
 
+void PPU::update_shift_registers() {
+  pt_shift_register[0] <<= 1;
+  pt_shift_register[1] <<= 1;
+  at_shift_register[0] = (at_shift_register[0] << 1) | at_latch[0];
+  at_shift_register[1] = (at_shift_register[1] << 1) | at_latch[1];
+}
+
+void PPU::reload_shift_registers() {
+  pt_shift_register[0] = (pt_shift_register[0] & 0xFF00) | pt_byte[0];
+  pt_shift_register[1] = (pt_shift_register[1] & 0xFF00) | pt_byte[1];
+  at_latch[0] = at_byte & 0x1;
+  at_latch[1] = (at_byte & 0x2) >> 1;
+}
+
 void PPU::render_scanline() {
-  // TODO: pixel
-  uint8_t scanline_buffer[256 + 8];
-  memset(scanline_buffer, 0x00, 256);
-  if (PPUMASK.show_bg) {
-    render_scanline_bg(scanline_buffer);
+  if (!rendering_enabled() || scanline_cycle == 0) {
+    return;
   }
-  if (PPUMASK.show_sprites) {
-    render_scanline_sprites(scanline_buffer);
-  }
-  for (int x = 0; x < 256; x++) {
-    uint8_t color = mem_read(0x3F00 | scanline_buffer[x]);
-    uint32_t rgb = rgb_palette[color];
-    pixels[scanline][x][0] = (rgb >> 16) & 0xFF;
-    pixels[scanline][x][1] = (rgb >> 8) & 0xFF;
-    pixels[scanline][x][2] = (rgb >> 0) & 0xFF;
-  }
-}
 
-void PPU::render_scanline_bg(uint8_t scanline_buffer[]) {
-  // TODO: fine_x_scroll
-  int y = scanline % 8;
-  for (int i = 0; i < 32; i++) {
-    uint16_t nt_addr = 0x2000 | (vram_addr.raw & 0x0FFF);
-    uint8_t tile_index = mem_read(nt_addr);
-    uint16_t pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (tile_index << 4);
-    uint8_t color_lo = mem_read(pt_addr_base | y);
-    uint8_t color_hi = mem_read(pt_addr_base | 0x0008 | y);
+  // Sprite pipeline
+  // TODO: Make cycle accurate?
+  if (scanline != 261) {
+    if (scanline_cycle == 1) {
+      clear_secondary_oam();
+    } else if (scanline_cycle == 64) {
+      evaluate_sprites();
+    }
+  }
+  if (scanline_cycle == 257) {
+    load_rendering_oam();
+  }
 
-    uint16_t at_addr = 0x23C0 | (vram_addr.nt_select << 10) |
-                       ((vram_addr.coarse_y_scroll >> 2) << 3) |
-                       (vram_addr.coarse_x_scroll >> 2);
-    int at_shift = (vram_addr.coarse_x_scroll & 0x0002) |
+  if (scanline_cycle <= 256 ||
+      (scanline_cycle >= 321 && scanline_cycle <= 336)) {
+    uint16_t nt_addr, at_addr, pt_addr_base;
+    int at_shift;
+    switch (scanline_cycle % 8) {
+      case 1:
+        // Fetch name table byte and reload shift registers/latches
+        nt_addr = 0x2000 | (vram_addr.raw & 0x0FFF);
+        if (scanline_cycle != 1 && scanline_cycle != 321) {
+          reload_shift_registers();
+        }
+        nt_byte = mem_read(nt_addr);
+        break;
+      case 3:
+        // Fetch attribute table byte
+        at_addr = 0x23C0 | (vram_addr.nt_select << 10) |
+                  ((vram_addr.coarse_y_scroll >> 2) << 3) |
+                  (vram_addr.coarse_x_scroll >> 2);
+        at_shift = (vram_addr.coarse_x_scroll & 0x0002) |
                    ((vram_addr.coarse_y_scroll & 0x0002) << 1);
-
-    uint8_t palette_index = (mem_read(at_addr) >> at_shift) & 0x03;
-
-    int start_x = i * 8;
-    for (int x = 0; x < 8; x++) {
-      uint8_t color_index = ((color_hi >> (7 - x)) & 0x1) << 1;
-      color_index |= ((color_lo >> (7 - x)) & 0x1);
-
-      uint8_t palette = color_index;
-      if (color_index != 0) {
-        palette |= (palette_index << 2);
+        at_byte = mem_read(at_addr) >> at_shift;
+        break;
+      case 5:
+        // Fetch pattern table lo byte
+        pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (nt_byte * 16);
+        pt_byte[0] = mem_read(pt_addr_base | vram_addr.fine_y_scroll);
+        break;
+      case 7:
+        // Fetch pattern table hi byte
+        pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (nt_byte * 16);
+        pt_byte[1] = mem_read(pt_addr_base | 0x0008 | vram_addr.fine_y_scroll);
+        break;
+      case 0:
+        // Increment x
+        if (vram_addr.coarse_x_scroll == 31) {
+          vram_addr.coarse_x_scroll = 0;
+          vram_addr.nt_select = vram_addr.nt_select + 1;
+        } else {
+          vram_addr.coarse_x_scroll++;
+        }
+        break;
+    }
+    if (scanline_cycle == 256) {
+      // Increment y
+      if (vram_addr.fine_y_scroll != 0x0007) {
+        vram_addr.fine_y_scroll++;
+      } else {
+        vram_addr.fine_y_scroll = 0;
+        if (vram_addr.coarse_y_scroll == 29) {
+          vram_addr.coarse_y_scroll = 0;
+          vram_addr.nt_select = vram_addr.nt_select + 2;
+        } else if (vram_addr.coarse_y_scroll == 31) {
+          vram_addr.coarse_y_scroll = 0;
+        } else {
+          vram_addr.coarse_y_scroll++;
+        }
       }
-      scanline_buffer[start_x + x] = palette;
     }
 
-    // Increment x
-    vram_addr.coarse_x_scroll++;
-  }
-
-  // Increment y
-  if (vram_addr.fine_y_scroll != 0x0007) {
-    vram_addr.fine_y_scroll++;
-  } else {
-    vram_addr.fine_y_scroll = 0;
-    if (vram_addr.coarse_y_scroll == 29) {
-      vram_addr.coarse_y_scroll = 0;
-      vram_addr.nt_select = vram_addr.nt_select + 2;
-    } else if (vram_addr.coarse_y_scroll == 31) {
-      vram_addr.coarse_y_scroll = 0;
-    } else {
-      vram_addr.coarse_y_scroll++;
+    // Render pixel
+    if (scanline != 261 && scanline_cycle <= 256) {
+      render_pixel();
     }
-  }
+    update_shift_registers();
+  } else if (scanline_cycle == 257) {
+    reload_shift_registers();
 
-  // Reset x
-  vram_addr.coarse_x_scroll = temp_vram_addr.coarse_x_scroll;
-  vram_addr.nt_select =
-      (vram_addr.nt_select & 0x2) | (temp_vram_addr.nt_select & 0x1);
+    // Reset x
+    vram_addr.coarse_x_scroll = temp_vram_addr.coarse_x_scroll;
+    vram_addr.nt_select =
+        (vram_addr.nt_select & 0x2) | (temp_vram_addr.nt_select & 0x1);
+  } else if (scanline_cycle == 337) {
+    reload_shift_registers();
+  }
 }
 
-void PPU::render_scanline_sprites(uint8_t scanline_buffer[]) {
-  int sprite_height = PPUCTRL.sprite_size ? 16 : 8;
-  OAMEntry secondary_oam[8];
+void PPU::clear_secondary_oam() {
   memset(secondary_oam, 0xFF, 8 * sizeof(OAMEntry));
+}
 
-  // Evaluation
+void PPU::evaluate_sprites() {
+  int sprite_height = PPUCTRL.sprite_size ? 16 : 8;
   int n = 0;
-  bool sprite_0 = false;
   for (int i = 0; i < 64; i++) {
     uint8_t y = OAM[i * 4 + 0];
-    if (y < 0xFF) {
-      y++;  // sprites are shifted down 1 row
-    }
     if (scanline >= y && scanline < y + sprite_height) {
-      if (i == 0) {
-        sprite_0 = true;
-      }
-      OAMEntry& entry = secondary_oam[n++];
-      entry.y = y;
-      entry.tile = OAM[i * 4 + 1];
-      entry.attributes = OAM[i * 4 + 2];
-      entry.x = OAM[i * 4 + 3];
       if (n == 8) {
         PPUSTATUS.sprite_overflow = 1;
         break;
       }
+      OAMEntry& entry = secondary_oam[n++];
+      entry.id = i;
+      entry.y = y;
+      entry.tile = OAM[i * 4 + 1];
+      entry.attributes = OAM[i * 4 + 2];
+      entry.x = OAM[i * 4 + 3];
     }
   }
+}
 
-  // Render
-  // TODO: 8x16
-  for (int i = 0; i < n; i++) {
-    OAMEntry& entry = secondary_oam[i];
-    uint8_t priority = (entry.attributes >> 5) & 0x01;
-    uint8_t flip_x = (entry.attributes >> 6) & 0x01;
+void PPU::load_rendering_oam() {
+  // TODO: Handle 8x16 sprites
+  for (int i = 0; i < 8; i++) {
+    rendering_oam[i] = secondary_oam[i];
+    OAMEntry& entry = rendering_oam[i];
+    if (entry.id == 0xFF) {
+      continue;
+    }
     uint8_t flip_y = (entry.attributes >> 7) & 0x01;
-
-    int start_x = entry.x;
     int y = (scanline - entry.y) % 8;
     if (flip_y) {
       y = 7 - y;
     }
-
     uint8_t tile_index = entry.tile;
     uint16_t pt_addr_base = (PPUCTRL.sprite_pt_addr << 12) | (tile_index << 4);
-    uint8_t color_lo = mem_read(pt_addr_base | y);
-    uint8_t color_hi = mem_read(pt_addr_base | 0x0008 | y);
-    uint8_t palette_index = entry.attributes & 0x03;
+    entry.data_lo = mem_read(pt_addr_base | y);
+    entry.data_hi = mem_read(pt_addr_base | 0x0008 | y);
+  }
+}
 
-    for (int x = 0; x < 8; x++) {
-      int shift_x = flip_x ? x : 7 - x;
-      uint8_t color_index = ((color_hi >> shift_x) & 0x1) << 1;
-      color_index |= ((color_lo >> shift_x) & 0x1);
+void PPU::render_pixel() {
+  int x = scanline_cycle - 1;
+  uint8_t palette = 0;
 
-      uint8_t palette = color_index;
-      if (color_index != 0) {
-        palette |= (palette_index << 2);
-        palette += 0x10;  // use sprite palettes
+  // Background pixel
+  if (PPUMASK.show_bg && (PPUMASK.show_bg_left8 || x > 8)) {
+    int pt_shift = 15 - fine_x_scroll;
+    uint8_t color_index = ((pt_shift_register[1] >> pt_shift) & 0x1) << 1;
+    color_index |= ((pt_shift_register[0] >> pt_shift) & 0x1);
+    int at_shift = 7 - fine_x_scroll;
+    uint8_t palette_index = (((at_shift_register[1] >> at_shift) & 0x1) << 1) |
+                            ((at_shift_register[0] >> at_shift) & 0x1);
+    palette = color_index;
+    if (color_index != 0) {
+      palette |= (palette_index << 2);
+    }
+  }
+
+  // Sprite pixel
+  if (PPUMASK.show_sprites && (PPUMASK.show_sprites_left8 || x > 8)) {
+    uint8_t sprite_palette = 0;
+    for (int i = 0; i < 8; i++) {
+      OAMEntry& entry = rendering_oam[i];
+      if (entry.id == 0xFF) {
+        break;
       }
-
-      if (palette == 0) {
+      uint8_t flip_x = (entry.attributes >> 6) & 0x01;
+      uint8_t priority = (entry.attributes >> 5) & 0x01;
+      int sprite_x = x - entry.x;
+      if (sprite_x < 0 || sprite_x >= 8) {
         continue;
       }
-
-      if (scanline_buffer[start_x + x] == 0) {
-        scanline_buffer[start_x + x] = palette;
+      uint8_t palette_index = entry.attributes & 0x03;
+      int shift_x = flip_x ? sprite_x : 7 - sprite_x;
+      uint8_t color_index = ((entry.data_hi >> shift_x) & 0x1) << 1;
+      color_index |= ((entry.data_lo >> shift_x) & 0x1);
+      if (color_index == 0) {
+        continue;
+      }
+      uint8_t sprite_palette = 0x10 | (palette_index << 2) | color_index;
+      if (palette == 0) {
+        palette = sprite_palette;
       } else {
-        if (i == 0 && sprite_0) {
+        if (entry.id == 0) {
+          // TODO: Technically cycle 2 is the earliest this can be set
           PPUSTATUS.sprite_0_hit = 1;
         }
         if (priority == 0) {
-          scanline_buffer[start_x + x] = palette;
+          palette = sprite_palette;
         }
       }
+      break;
     }
   }
+
+  uint8_t color = mem_read(0x3F00 | palette);
+  uint32_t rgb = rgb_palette[color];
+  pixels[scanline][x][0] = (rgb >> 16) & 0xFF;
+  pixels[scanline][x][1] = (rgb >> 8) & 0xFF;
+  pixels[scanline][x][2] = (rgb >> 0) & 0xFF;
 }
 
 void PPU::render_tile(int tile_index, int start_x, int start_y) {
