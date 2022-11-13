@@ -1,28 +1,38 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <vector>
 #include "ppu.h"
+
+struct ROMData {
+  char header[16];
+  std::vector<uint8_t> pgr_rom;
+  std::vector<uint8_t> chr_rom;
+};
 
 class Mapper {
  public:
-  uint8_t pgr_rom_banks[8][0x4000];  // 16kb each
-  uint8_t chr_rom_banks[8][0x2000];  // 8kb each
+  std::vector<uint8_t> pgr_rom;
+  std::vector<uint8_t> chr_rom;
+  uint8_t pgr_ram[0x2000];  // 8kb
+  int pgr_map[4];           // 8kb (0x2000) blocks
+  int chr_map[8];           // 1kb (0x400) blocks
 
-  int num_pgr_banks;
-  int num_chr_banks;
   int num_ram_banks;
   bool has_trainer;
   bool has_ram;
-  bool vertical_mirroring;
+  MirrorMode mirror_mode;
 
-  // Mapper() = delete;
-  Mapper(char header[]);
+  Mapper(ROMData& rom_data);
   virtual ~Mapper() = default;
 
-  virtual uint8_t mem_read(uint16_t addr) = 0;
-  virtual void mem_write(uint16_t addr, uint8_t value) = 0;
-  virtual uint8_t chr_mem_read(uint16_t addr) = 0;
-  virtual void chr_mem_write(uint16_t addr, uint8_t value) = 0;
+  virtual uint8_t mem_read(uint16_t addr);
+  virtual void mem_write(uint16_t addr, uint8_t value);
+  virtual uint8_t chr_mem_read(uint16_t addr);
+  virtual void chr_mem_write(uint16_t addr, uint8_t value);
+
+  void set_pgr_map(uint16_t bank_size, uint8_t from_bank, uint8_t to_bank);
+  void set_chr_map(uint16_t bank_size, uint8_t from_bank, uint8_t to_bank);
 };
 
 class Cartridge {
