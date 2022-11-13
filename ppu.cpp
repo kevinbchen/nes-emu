@@ -14,7 +14,15 @@ void PPU::power_on() {
   PPUCTRL.raw = 0x00;
   PPUMASK.raw = 0x00;
   PPUSTATUS.raw = 0x00;
+
+  memset(CIRAM, 0x00, 0x800);
+  memset(CGRAM, 0x00, 32);
+  memset(OAM, 0x00, 256);
   memset(pixels, 0x00, 240 * 256 * 3);
+}
+
+void PPU::set_mirror_mode(MirrorMode mode) {
+  nt_mirror_mode = mode;
 }
 
 uint16_t PPU::nt_mirror_addr(uint16_t addr) {
@@ -436,21 +444,49 @@ void PPU::render_pixel() {
   pixels[scanline][x][2] = (rgb >> 0) & 0xFF;
 }
 
-void PPU::render_tile(int tile_index, int start_x, int start_y) {
-  const uint8_t colors[4] = {0, 100, 200, 255};
+void PPU::render_nametables(uint8_t (&out)[480][512][3]) {
+  for (int i = 0; i < 4; i++) {
+    uint16_t base_addr = 0x2000 + 0x0400 * i;
+    int start_x = (i % 2) * 256;
+    int start_y = (i / 2) * 240;
+    for (int y = 0; y < 30; y++) {
+      for (int x = 0; x < 32; x++) {
+        uint8_t tile_index = nes.ppu.mem_read(base_addr + y * 32 + x);
+        uint16_t at_addr = base_addr | 0x03C0 | ((y >> 2) << 3) | (x >> 2);
+        int at_shift = (x & 0x0002) | ((y & 0x0002) << 1);
+        uint8_t palette_index = (mem_read(at_addr) >> at_shift) & 0x03;
+        render_tile(tile_index, palette_index, start_x + x * 8, start_y + y * 8,
+                    512, &out[0][0][0]);
+      }
+    }
+  }
+}
 
-  uint16_t addr_base = (tile_index << 4);
+void PPU::render_tile(uint8_t tile_index,
+                      uint8_t palette_index,
+                      int start_x,
+                      int start_y,
+                      int stride_x,
+                      uint8_t* out) {
+  uint16_t pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (tile_index << 4);
   for (int y = 0; y < 8; y++) {
-    uint8_t color_lo = mem_read(addr_base | y);
-    uint8_t color_hi = mem_read(addr_base | 0x0008 | y);
+    uint8_t color_lo = mem_read(pt_addr_base | y);
+    uint8_t color_hi = mem_read(pt_addr_base | 0x0008 | y);
 
     for (int x = 0; x < 8; x++) {
       uint8_t color_index = ((color_hi >> (7 - x)) & 0x01) << 1;
       color_index |= ((color_lo >> (7 - x)) & 0x01);
 
-      pixels[start_y + y][start_x + x][0] = colors[color_index];
-      pixels[start_y + y][start_x + x][1] = colors[color_index];
-      pixels[start_y + y][start_x + x][2] = colors[color_index];
+      uint8_t palette = color_index;
+      if (color_index != 0) {
+        palette |= (palette_index << 2);
+      }
+      uint8_t color = mem_read(0x3F00 | palette);
+      uint32_t rgb = rgb_palette[color];
+      int i = (start_y + y) * stride_x + start_x + x;
+      out[i * 3 + 0] = (rgb >> 16) & 0xFF;
+      out[i * 3 + 1] = (rgb >> 8) & 0xFF;
+      out[i * 3 + 2] = (rgb >> 0) & 0xFF;
     }
   }
 }

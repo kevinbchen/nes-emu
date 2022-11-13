@@ -22,6 +22,7 @@ class PPU {
 
   PPU(NES& nes);
   void power_on();
+  void set_mirror_mode(MirrorMode mode);
 
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
@@ -32,7 +33,15 @@ class PPU {
   bool rendering_enabled();
   void render_pixel();
   void render_scanline();
-  void render_tile(int tile_index, int start_x, int start_y);
+
+  // Debug rendering
+  void render_nametables(uint8_t (&out)[480][512][3]);
+  void render_tile(uint8_t tile_index,
+                   uint8_t attribute,
+                   int start_x,
+                   int start_y,
+                   int stride_x,
+                   uint8_t* out);
 
  private:
   NES& nes;

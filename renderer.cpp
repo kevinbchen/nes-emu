@@ -5,10 +5,6 @@
 
 namespace {
 
-static const int SCREEN_WIDTH = 256;
-static const int SCREEN_HEIGHT = 240;
-static const int TEXTURE_SIZE = SCREEN_WIDTH;
-
 const char* vertex_shader_data =
 #ifdef __EMSCRIPTEN__
     "#version 300 es\n"
@@ -18,8 +14,9 @@ const char* vertex_shader_data =
     "layout(location=0) in vec3 a_pos;\n"
     "layout(location=1) in vec2 a_tex;\n"
     "out vec2 v_tex;\n"
+    "uniform mat4 transform;\n"
     "void main() {\n"
-    "   gl_Position = vec4(a_pos.x, a_pos.y, a_pos.z, 1.0);\n"
+    "   gl_Position = transform * vec4(a_pos.x, a_pos.y, a_pos.z, 1.0);\n"
     "   v_tex = a_tex;\n"
     "}";
 
@@ -38,18 +35,11 @@ const char* fragment_shader_data =
     "   o_color = color;\n"
     "}";
 
-// Fullscreen rectangle
-constexpr float v_max = (float)SCREEN_HEIGHT / TEXTURE_SIZE;
-float vertices[] = {
-    // x, y, z, u, v
-    -1.0f, -1.0f, 0.0f, 0.0f, v_max,  // bottom left
-    1.0f,  -1.0f, 0.0f, 1.0f, v_max,  // bottom right
-    -1.0f, 1.0f,  0.0f, 0.0f, 0.0f,   // top left
-    1.0f,  1.0f,  0.0f, 1.0f, 0.0f    // top right
-};
-unsigned int indices[] = {
-    0, 1, 3,  //
-    0, 2, 3   //
+float transform_matrix[][4] = {
+    {1.0f, 0.0f, 0.0f, 0.0f},
+    {0.0f, 1.0f, 0.0f, 0.0f},
+    {0.0f, 0.0f, 1.0f, 0.0f},
+    {0.0f, 0.0f, 0.0f, 1.0f},
 };
 
 std::unordered_map<int, Button> button_mapping{
@@ -62,10 +52,11 @@ std::unordered_map<int, Button> button_mapping{
 }  // namespace
 
 void Renderer::render() {
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  glUniformMatrix4fv(transform_loc, 1, GL_TRUE, &transform_matrix[0][0]);
+  glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 
   glfwSwapBuffers(window);
   glfwPollEvents();
@@ -75,8 +66,9 @@ bool Renderer::init() {
   if (!glfwInit()) {
     return false;
   }
-  window = glfwCreateWindow(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2, "nes-emu",
-                            nullptr, nullptr);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  window = glfwCreateWindow(window_width, window_height, "nes-emu", nullptr,
+                            nullptr);
   if (!window) {
     glfwTerminate();
     return false;
@@ -102,17 +94,26 @@ bool Renderer::init() {
          GLAD_VERSION_MINOR(version));
 #endif
 
+  // Setup transform matrix so bottom-left is (0, 0) and top-right is
+  // (window_width, window_height)
+  transform_matrix[0][0] = 2.0f / window_width;
+  transform_matrix[0][3] = -1.0f;
+  transform_matrix[1][1] = 2.0f / window_height;
+  transform_matrix[1][3] = -1.0f;
+
+  // Vertices
   glGenVertexArrays(1, &VAO);
   glBindVertexArray(VAO);
 
   glGenBuffers(1, &VBO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
+               vertices.data(), GL_STATIC_DRAW);
 
   glGenBuffers(1, &EBO);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-               GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+               indices.data(), GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
   glEnableVertexAttribArray(0);
@@ -124,7 +125,7 @@ bool Renderer::init() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_SIZE, TEXTURE_SIZE, 0, GL_RGB,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texture_size, texture_size, 0, GL_RGB,
                GL_UNSIGNED_BYTE, nullptr);
 
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
@@ -166,9 +167,32 @@ bool Renderer::init() {
     return false;
   }
   glUseProgram(shader_program);
+  transform_loc = glGetUniformLocation(shader_program, "transform");
 
   glBindVertexArray(VAO);
   return true;
+}
+
+void Renderer::add_quad(float x,
+                        float y,
+                        float w,
+                        float h,
+                        float u,
+                        float v,
+                        float uv_scale) {
+  unsigned int i = vertices.size() / 5;
+  u /= texture_size;
+  v /= texture_size;
+  float u2 = u + (w * uv_scale) / texture_size;
+  float v2 = v + (h * uv_scale) / texture_size;
+
+  vertices.insert(vertices.end(), {x, y, 0, u, v2});          // bottom left
+  vertices.insert(vertices.end(), {x + w, y, 0, u2, v2});     // bottom right
+  vertices.insert(vertices.end(), {x, y + h, 0, u, v});       // top left
+  vertices.insert(vertices.end(), {x + w, y + h, 0, u2, v});  // top right
+
+  indices.insert(indices.end(), {i, i + 1, i + 3});
+  indices.insert(indices.end(), {i, i + 2, i + 3});
 }
 
 void Renderer::destroy() {
@@ -183,10 +207,10 @@ bool Renderer::done() {
   return glfwWindowShouldClose(window);
 }
 
-void Renderer::set_pixels(uint8_t* pixels) {
+void Renderer::set_pixels(uint8_t* pixels, int x, int y, int w, int h) {
   glBindTexture(GL_TEXTURE_2D, texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_SIZE, SCREEN_HEIGHT, GL_RGB,
-                  GL_UNSIGNED_BYTE, pixels);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE,
+                  pixels);
 }
 
 void Renderer::key_callback(int key, int scancode, int action, int mods) {
