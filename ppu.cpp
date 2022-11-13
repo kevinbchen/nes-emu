@@ -363,7 +363,7 @@ void PPU::evaluate_sprites() {
 }
 
 void PPU::load_rendering_oam() {
-  // TODO: Handle 8x16 sprites
+  int sprite_height = PPUCTRL.sprite_size ? 16 : 8;
   for (int i = 0; i < 8; i++) {
     rendering_oam[i] = secondary_oam[i];
     OAMEntry& entry = rendering_oam[i];
@@ -371,12 +371,18 @@ void PPU::load_rendering_oam() {
       continue;
     }
     uint8_t flip_y = (entry.attributes >> 7) & 0x01;
-    int y = (scanline - entry.y) % 8;
+    int y = (scanline - entry.y) % sprite_height;
     if (flip_y) {
-      y = 7 - y;
+      y = sprite_height - 1 - y;
     }
     uint8_t tile_index = entry.tile;
-    uint16_t pt_addr_base = (PPUCTRL.sprite_pt_addr << 12) | (tile_index << 4);
+    uint16_t pt_addr_base;
+    if (sprite_height == 16) {
+      pt_addr_base = ((tile_index & 0x01) << 12) | ((tile_index & 0xFE) << 4);
+      y = y + (y & 0x08);
+    } else {
+      pt_addr_base = (PPUCTRL.sprite_pt_addr << 12) | (tile_index << 4);
+    }
     entry.data_lo = mem_read(pt_addr_base | y);
     entry.data_hi = mem_read(pt_addr_base | 0x0008 | y);
   }

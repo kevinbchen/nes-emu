@@ -80,6 +80,7 @@ class PPU {
   } PPUCTRL;
   void write_PPUCTRL(uint8_t value);
 
+  // TODO: Handle greyscale and tints
   union {
     uint8_t raw;
     BitField8<0, 1> greyscale;
