@@ -452,29 +452,45 @@ void PPU::render_pixel() {
 
 void PPU::render_nametables(uint8_t (&out)[480][512][3]) {
   for (int i = 0; i < 4; i++) {
-    uint16_t base_addr = 0x2000 + 0x0400 * i;
+    uint16_t base_addr = 0x2000 + i * 0x0400;
     int start_x = (i % 2) * 256;
     int start_y = (i / 2) * 240;
     for (int y = 0; y < 30; y++) {
       for (int x = 0; x < 32; x++) {
         uint8_t tile_index = nes.ppu.mem_read(base_addr + y * 32 + x);
+        uint16_t pt_addr = (PPUCTRL.bg_pt_addr << 12) | (tile_index << 4);
         uint16_t at_addr = base_addr | 0x03C0 | ((y >> 2) << 3) | (x >> 2);
         int at_shift = (x & 0x0002) | ((y & 0x0002) << 1);
         uint8_t palette_index = (mem_read(at_addr) >> at_shift) & 0x03;
-        render_tile(tile_index, palette_index, start_x + x * 8, start_y + y * 8,
+        render_tile(pt_addr, palette_index, start_x + x * 8, start_y + y * 8,
                     512, &out[0][0][0]);
       }
     }
   }
 }
 
-void PPU::render_tile(uint8_t tile_index,
+void PPU::render_pattern_tables(uint8_t (&out)[128][256][3]) {
+  for (int i = 0; i < 2; i++) {
+    int start_x = i * 128;
+    for (int y = 0; y < 16; y++) {
+      for (int x = 0; x < 16; x++) {
+        uint8_t tile_index = i * 256 + y * 16 + x;
+        uint16_t pt_addr = i * 0x1000 + (tile_index << 4);
+        render_tile(pt_addr, 0, start_x + x * 8, y * 8, 256, &out[0][0][0],
+                    true);
+      }
+    }
+  }
+}
+
+void PPU::render_tile(uint16_t tile_addr,
                       uint8_t palette_index,
                       int start_x,
                       int start_y,
                       int stride_x,
-                      uint8_t* out) {
-  uint16_t pt_addr_base = (PPUCTRL.bg_pt_addr << 12) | (tile_index << 4);
+                      uint8_t* out,
+                      bool greyscale) {
+  uint16_t pt_addr_base = tile_addr;
   for (int y = 0; y < 8; y++) {
     uint8_t color_lo = mem_read(pt_addr_base | y);
     uint8_t color_hi = mem_read(pt_addr_base | 0x0008 | y);
@@ -487,8 +503,14 @@ void PPU::render_tile(uint8_t tile_index,
       if (color_index != 0) {
         palette |= (palette_index << 2);
       }
-      uint8_t color = mem_read(0x3F00 | palette);
-      uint32_t rgb = rgb_palette[color];
+      uint32_t rgb = 0;
+      if (greyscale) {
+        uint8_t c = color_index * 85;
+        rgb = c | (c << 8) | (c << 16);
+      } else {
+        uint8_t color = mem_read(0x3F00 | palette);
+        rgb = rgb_palette[color];
+      }
       int i = (start_y + y) * stride_x + start_x + x;
       out[i * 3 + 0] = (rgb >> 16) & 0xFF;
       out[i * 3 + 1] = (rgb >> 8) & 0xFF;

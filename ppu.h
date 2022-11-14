@@ -36,12 +36,14 @@ class PPU {
 
   // Debug rendering
   void render_nametables(uint8_t (&out)[480][512][3]);
-  void render_tile(uint8_t tile_index,
-                   uint8_t attribute,
+  void render_pattern_tables(uint8_t (&out)[128][256][3]);
+  void render_tile(uint16_t tile_addr,
+                   uint8_t palette_index,
                    int start_x,
                    int start_y,
                    int stride_x,
-                   uint8_t* out);
+                   uint8_t* out,
+                   bool greyscale = false);
 
  private:
   NES& nes;

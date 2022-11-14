@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(libs/glad)
+add_subdirectory(libs/imgui)
 
 set(SRC_FILES 
   cartridge.cpp
@@ -16,6 +17,7 @@ set(SRC_FILES
 
 add_executable(nes-emu main.cpp renderer.cpp ${SRC_FILES})
 add_executable(nestest nestest.cpp ${SRC_FILES})
+target_link_libraries(nes-emu PRIVATE imgui)
 
 if (EMSCRIPTEN)
   set_target_properties(nes-emu
