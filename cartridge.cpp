@@ -97,11 +97,19 @@ class Mapper1 : public Mapper {
 
   void set_control(uint8_t value) {
     control = value;
-    if (control & 0x02) {
-      mirror_mode =
-          control == 0x02 ? MirrorMode::VERTICAL : MirrorMode::HORIZONTAL;
-    } else {
-      mirror_mode = MirrorMode::SINGLE;
+    switch (control & 0x03) {
+      case 0:
+        mirror_mode = MirrorMode::SINGLE_LOWER;
+        break;
+      case 1:
+        mirror_mode = MirrorMode::SINGLE_UPPER;
+        break;
+      case 2:
+        mirror_mode = MirrorMode::VERTICAL;
+        break;
+      case 3:
+        mirror_mode = MirrorMode::HORIZONTAL;
+        break;
     }
   }
 

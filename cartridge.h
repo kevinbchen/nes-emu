@@ -21,7 +21,7 @@ class Mapper {
   int num_ram_banks;
   bool has_trainer;
   bool has_ram;
-  MirrorMode mirror_mode;
+  MirrorMode mirror_mode = MirrorMode::VERTICAL;
 
   Mapper(ROMData& rom_data);
   virtual ~Mapper() = default;

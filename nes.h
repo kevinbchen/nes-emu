@@ -16,7 +16,6 @@ class NES {
 
   void load(const char* filename) {
     cartridge.load(filename);
-    ppu.set_mirror_mode(cartridge.get_mirror_mode());
     cpu.power_on();
     ppu.power_on();
   }

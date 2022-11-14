@@ -21,18 +21,16 @@ void PPU::power_on() {
   memset(pixels, 0x00, 240 * 256 * 3);
 }
 
-void PPU::set_mirror_mode(MirrorMode mode) {
-  nt_mirror_mode = mode;
-}
-
 uint16_t PPU::nt_mirror_addr(uint16_t addr) {
-  switch (nt_mirror_mode) {
+  switch (nes.cartridge.get_mirror_mode()) {
     case MirrorMode::HORIZONTAL:
-      return (addr & 0x3FF) + ((addr >> 1) & 0x400);
+      return ((addr >> 1) & 0x400) | (addr & 0x3FF);
     case MirrorMode::VERTICAL:
       return addr & 0x7FF;
-    case MirrorMode::SINGLE:
+    case MirrorMode::SINGLE_LOWER:
       return addr & 0x3FF;
+    case MirrorMode::SINGLE_UPPER:
+      return 0x400 | (addr & 0x3FF);
     case MirrorMode::FOUR:
     default:
       throw std::runtime_error("unimplemented");
@@ -298,7 +296,7 @@ void PPU::render_scanline() {
         // Increment x
         if (vram_addr.coarse_x_scroll == 31) {
           vram_addr.coarse_x_scroll = 0;
-          vram_addr.nt_select = vram_addr.nt_select + 1;
+          vram_addr.nt_select = vram_addr.nt_select ^ 0x1;
         } else {
           vram_addr.coarse_x_scroll++;
         }
@@ -312,7 +310,7 @@ void PPU::render_scanline() {
         vram_addr.fine_y_scroll = 0;
         if (vram_addr.coarse_y_scroll == 29) {
           vram_addr.coarse_y_scroll = 0;
-          vram_addr.nt_select = vram_addr.nt_select + 2;
+          vram_addr.nt_select = vram_addr.nt_select ^ 0x2;
         } else if (vram_addr.coarse_y_scroll == 31) {
           vram_addr.coarse_y_scroll = 0;
         } else {

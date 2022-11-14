@@ -12,7 +12,13 @@ struct OAMEntry {
   uint8_t data_lo;
 };
 
-enum class MirrorMode { VERTICAL, HORIZONTAL, SINGLE, FOUR };
+enum class MirrorMode {
+  VERTICAL,
+  HORIZONTAL,
+  SINGLE_LOWER,
+  SINGLE_UPPER,
+  FOUR
+};
 
 class NES;
 class PPU {
@@ -22,7 +28,6 @@ class PPU {
 
   PPU(NES& nes);
   void power_on();
-  void set_mirror_mode(MirrorMode mode);
 
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
@@ -52,7 +57,6 @@ class PPU {
   uint8_t CGRAM[32];     // 32 bytes of Color Generator RAM (only 28 bytes used)
   uint8_t OAM[256];      // 64 entries
 
-  MirrorMode nt_mirror_mode = MirrorMode::VERTICAL;
   uint16_t nt_mirror_addr(uint16_t addr);
 
   // registers
