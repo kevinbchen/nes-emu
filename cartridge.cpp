@@ -78,9 +78,7 @@ class Mapper0 : public Mapper {
       set_pgr_map(0x4000, 0, 0);
       set_pgr_map(0x4000, 1, 0);
     }
-    for (int i = 0; i < 8; i++) {
-      set_chr_map(0x2000, 0, 0);
-    }
+    set_chr_map(0x2000, 0, 0);
   }
 };
 
@@ -180,6 +178,36 @@ class Mapper1 : public Mapper {
   }
 };
 
+class Mapper2 : public Mapper {
+ public:
+  Mapper2(ROMData& rom_data) : Mapper(rom_data) {
+    set_pgr_map(0x4000, 0, 0);
+    set_pgr_map(0x4000, 1, pgr_rom.size() / 0x4000 - 1);
+    set_chr_map(0x2000, 0, 0);
+  }
+
+  void mem_write(uint16_t addr, uint8_t value) override {
+    Mapper::mem_write(addr, value);
+    if (addr >= 0x8000) {
+      // Select 16 KB PRG ROM bank for CPU $8000-$BFFF
+      set_pgr_map(0x4000, 0, value & 0x0F);
+    }
+  }
+};
+
+class Mapper3 : public Mapper0 {
+ public:
+  Mapper3(ROMData& rom_data) : Mapper0(rom_data) { set_chr_map(0x2000, 0, 0); }
+
+  void mem_write(uint16_t addr, uint8_t value) override {
+    Mapper::mem_write(addr, value);
+    if (addr >= 0x8000) {
+      // Select 8 KB CHR ROM bank for PPU $0000-$1FFF
+      set_chr_map(0x2000, 0, value & 0x03);
+    }
+  }
+};
+
 void Cartridge::load(const char* filename) {
   printf("Loading %s...\n", filename);
   std::ifstream file(filename, std::ios::in | std::ios::binary);
@@ -219,6 +247,12 @@ void Cartridge::load(const char* filename) {
       break;
     case 1:
       mapper = std::make_unique<Mapper1>(rom_data);
+      break;
+    case 2:
+      mapper = std::make_unique<Mapper2>(rom_data);
+      break;
+    case 3:
+      mapper = std::make_unique<Mapper3>(rom_data);
       break;
     default:
       throw std::runtime_error("Unsupported mapper type " +
