@@ -1,8 +1,6 @@
 #pragma once
 #include <cstdint>
 #include "bitfield.h"
-#include "cartridge.h"
-#include "ppu.h"
 
 class NES;
 

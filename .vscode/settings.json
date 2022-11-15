@@ -71,6 +71,13 @@
     "xlocmon": "cpp",
     "xloctime": "cpp",
     "xtree": "cpp",
-    "cstdarg": "cpp"
+    "cstdarg": "cpp",
+    "future": "cpp",
+    "bitset": "cpp",
+    "cinttypes": "cpp",
+    "complex": "cpp",
+    "csignal": "cpp",
+    "deque": "cpp",
+    "numeric": "cpp"
   }
 }

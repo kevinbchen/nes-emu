@@ -214,7 +214,7 @@ void PPU::tick() {
   }
   scanline_cycle++;
   if (scanline_cycle >= 341) {
-    scanline_cycle = scanline_cycle % 340;  // modulo for the odd frame case
+    scanline_cycle = scanline_cycle % 341;  // modulo for the odd frame case
     scanline++;
     if (scanline > 261) {
       scanline = 0;

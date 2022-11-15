@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstdio>
 #include <stdexcept>
+#include "audio.h"
 #include "nes.h"
 #include "renderer.h"
 
@@ -10,6 +11,7 @@
 
 NES nes;
 Renderer renderer(nes);
+Audio audio(nes);
 
 void loop() {
   while (true) {
@@ -19,12 +21,16 @@ void loop() {
       break;
     }
   }
+  audio.output();
   renderer.render();
 }
 
 int main(int argc, char* agv[]) {
   try {
     if (!renderer.init()) {
+      return -1;
+    }
+    if (!audio.init()) {
       return -1;
     }
 

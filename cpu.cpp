@@ -81,7 +81,9 @@ uint8_t CPU::mem_read(uint16_t addr) {
     return nes.ppu.port_read(addr & 0x2007);
   } else if (addr <= 0x401F) {
     // APU and I/O registers, 32 bytes
-    if (addr == 0x4016 || addr == 0x4017) {
+    if (addr <= 0x4015) {
+      return nes.apu.port_read(addr);
+    } else if (addr == 0x4016 || addr == 0x4017) {
       return nes.joypad.port_read(addr);
     }
     return 0;
@@ -105,16 +107,14 @@ void CPU::mem_write(uint16_t addr, uint8_t value) {
     nes.ppu.port_write(addr & 0x2007, value);
   } else if (addr <= 0x401F) {
     // APU and I/O registers, 32 bytes
-    if (addr == 0x4014) {
+    if (addr <= 0x4013 || addr == 0x4015 || addr == 0x4017) {
+      nes.apu.port_write(addr, value);
+    } else if (addr == 0x4014) {
       OAM_DMA(value);
     } else if (addr == 0x4016) {
       nes.joypad.port_write(addr, value);
-    } else {
-      // throw std::runtime_error("Unhandled CPU memory address");
     }
   } else {
-    // ROM
-    // TODO
     nes.cartridge.mem_write(addr, value);
   }
 }
@@ -131,6 +131,9 @@ void CPU::tick() {
   nes.ppu.tick();
   nes.ppu.tick();
   nes.ppu.tick();
+  if (cycles % 2 == 0) {
+    nes.apu.tick();
+  }
   cycles++;
 }
 
