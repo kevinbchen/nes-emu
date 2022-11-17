@@ -131,9 +131,8 @@ void CPU::tick() {
   nes.ppu.tick();
   nes.ppu.tick();
   nes.ppu.tick();
-  if (cycles % 2 == 0) {
-    nes.apu.tick();
-  }
+
+  nes.apu.tick();
   cycles++;
 }
 
