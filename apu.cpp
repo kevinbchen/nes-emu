@@ -79,20 +79,23 @@ void APU::port_write(uint16_t addr, uint8_t value) {
 }
 
 void APU::write_status(uint8_t value) {
-  status.raw = value;
-  if (!status.enable_pulse1) {
+  pulse[0].enabled = (value >> 0) & 0x01;
+  if (!pulse[0].enabled) {
     pulse[0].length_counter = 0;
   }
-  if (!status.enable_pulse2) {
+  pulse[1].enabled = (value >> 1) & 0x01;
+  if (!pulse[1].enabled) {
     pulse[1].length_counter = 0;
   }
-  if (!status.enable_triangle) {
+  triangle.enabled = (value >> 2) & 0x01;
+  if (!triangle.enabled) {
     triangle.length_counter = 0;
   }
-  if (!status.enable_noise) {
+  noise.enabled = (value >> 3) & 0x01;
+  if (!noise.enabled) {
     noise.length_counter = 0;
   }
-  // TODO: clear DMC interrupt flag
+  // TODO: DMC enable, clear DMC interrupt flag
 }
 
 uint8_t APU::read_status() {
@@ -108,37 +111,50 @@ uint8_t APU::read_status() {
 }
 
 void APU::write_frame_counter_control(uint8_t value) {
-  frame_counter_control.raw = value;
+  frame_counter_mode = value >> 7;
+  frame_counter_irq_inhibit = (value >> 6) & 0x01;
+
+  if (frame_counter_mode == 1) {
+    // Immediately clock all units
+    frame_counter_step = 3;
+    cycle = frame_counter_cycles[frame_counter_mode][frame_counter_step] - 1;
+    update_frame_counter();
+  } else {
+    cycle = 0;
+    frame_counter_step = 0;
+  }
 }
 
-void APU::tick() {
-  // Update frame counter
-  uint8_t mode = frame_counter_control.mode;
-  if (cycle++ == frame_counter_cycles[mode][frame_counter_step]) {
+void APU::update_frame_counter() {
+  if (cycle++ == frame_counter_cycles[frame_counter_mode][frame_counter_step]) {
     for (int i = 0; i < 2; i++) {
-      pulse[i].update_envelope();
+      pulse[i].envelope.update();
     }
     triangle.update_linear_counter();
-    noise.update_envelope();
+    noise.envelope.update();
 
     if (frame_counter_step % 2 == 1) {
       for (int i = 0; i < 2; i++) {
-        pulse[i].update_length_counter();
+        pulse[i].length_counter.update();
         pulse[i].update_sweep();
       }
-      triangle.update_length_counter();
-      noise.update_length_counter();
+      triangle.length_counter.update();
+      noise.length_counter.update();
     }
 
     frame_counter_step++;
     if (frame_counter_step >= 4) {
       frame_counter_step = 0;
       cycle = 0;
-      if (mode == 0 && !frame_counter_control.irq_inhibit) {
+      if (frame_counter_mode == 0 && !frame_counter_irq_inhibit) {
         nes.cpu.request_IRQ();
       }
     }
   }
+}
+
+void APU::tick() {
+  update_frame_counter();
 
   // Update timers
   if (cycle % 2 == 0) {
@@ -159,17 +175,16 @@ void APU::tick() {
 
 void APU::sample() {
   uint8_t pulse_index = 0;
-  if (status.enable_pulse1) {
-    pulse_index += pulse[0].output();
-  }
-  if (status.enable_pulse2) {
-    pulse_index += pulse[1].output();
+  for (int i = 0; i < 2; i++) {
+    if (pulse[i].enabled) {
+      pulse_index += pulse[i].output();
+    }
   }
   uint8_t tnd_index = 0;
-  if (status.enable_triangle) {
+  if (triangle.enabled) {
     tnd_index += triangle.output() * 3;
   }
-  if (status.enable_noise) {
+  if (noise.enabled) {
     tnd_index += noise.output() * 2;
   }
   float pulse_out = pulse_table[pulse_index];
@@ -182,13 +197,54 @@ void APU::output() {
   sample_count = 0;
 }
 
+void LengthCounter::load(uint8_t index) {
+  if (enabled) {
+    counter = length_table[index];
+  }
+}
+
+void LengthCounter::update() {
+  if (counter > 0 && !halt) {
+    counter--;
+  }
+}
+
+void Envelope::load(uint8_t data) {
+  constant_volume = (data >> 4) & 0x01;
+  volume_or_period = data & 0x0F;
+}
+
+void Envelope::update() {
+  if (start) {
+    start = false;
+    decay_level_counter = 15;
+    divider = volume_or_period;
+  } else {
+    if (divider == 0) {
+      divider = volume_or_period;
+      if (decay_level_counter == 0) {
+        if (loop) {
+          decay_level_counter = 15;
+        }
+      } else {
+        decay_level_counter--;
+      }
+    } else {
+      divider--;
+    }
+  }
+}
+
+uint8_t Envelope::volume() {
+  return constant_volume ? volume_or_period : decay_level_counter;
+}
+
 void Pulse::write_register(uint16_t addr, uint8_t value) {
   switch (addr & 0xFFF3) {
     case 0x4000:
       duty = (value >> 6) & 0x03;
-      length_counter_halt = (value >> 5) & 0x01;
-      constant_volume = (value >> 4) & 0x01;
-      volume_or_period = value & 0x0F;
+      fc_halt_or_loop = (value >> 5) & 0x01;
+      envelope.load(value);
       break;
     case 0x4001:
       sweep = value >> 7;
@@ -205,37 +261,10 @@ void Pulse::write_register(uint16_t addr, uint8_t value) {
     case 0x4003:
       timer_period = ((value & 0x07) << 8) | (timer_period & 0x00FF);
       calculate_target_period();
-      length_counter = length_table[value >> 3];
+      length_counter.load(value >> 3);
       sequence_counter = 0;
-      envelope_start = true;
+      envelope.start = true;
       break;
-  }
-}
-
-void Pulse::update_envelope() {
-  if (envelope_start) {
-    envelope_start = false;
-    decay_level_counter = 15;
-    envelope_divider = volume_or_period;
-  } else {
-    if (envelope_divider == 0) {
-      envelope_divider = volume_or_period;
-      if (decay_level_counter == 0) {
-        if (length_counter_halt) {
-          decay_level_counter = 15;
-        }
-      } else {
-        decay_level_counter--;
-      }
-    } else {
-      envelope_divider--;
-    }
-  }
-}
-
-void Pulse::update_length_counter() {
-  if (length_counter > 0 && !length_counter_halt) {
-    length_counter--;
   }
 }
 
@@ -275,14 +304,13 @@ uint8_t Pulse::output() {
   if (sweep_muted() || length_counter == 0) {
     return 0;
   }
-  uint8_t volume = constant_volume ? volume_or_period : decay_level_counter;
-  return pulse_sequence[duty][sequence_counter] * volume;
+  return pulse_sequence[duty][sequence_counter] * envelope.volume();
 }
 
 void Triangle::write_register(uint16_t addr, uint8_t value) {
   switch (addr) {
     case 0x4008:
-      length_counter_halt = (value >> 7) & 0x01;
+      fc_halt_or_linear_control = (value >> 7) & 0x01;
       linear_counter_period = value & 0x7F;
       break;
     case 0x400A:
@@ -290,15 +318,9 @@ void Triangle::write_register(uint16_t addr, uint8_t value) {
       break;
     case 0x400B:
       timer_period = ((value & 0x07) << 8) | (timer_period & 0x00FF);
-      length_counter = length_table[value >> 3];
+      length_counter.load(value >> 3);
       linear_counter_reload = true;
       break;
-  }
-}
-
-void Triangle::update_length_counter() {
-  if (length_counter > 0 && !length_counter_halt) {
-    length_counter--;
   }
 }
 
@@ -308,7 +330,7 @@ void Triangle::update_linear_counter() {
   } else if (linear_counter > 0) {
     linear_counter--;
   }
-  if (!length_counter_halt) {
+  if (!fc_halt_or_linear_control) {
     linear_counter_reload = false;
   }
 }
@@ -329,45 +351,17 @@ uint8_t Triangle::output() {
 void Noise::write_register(uint16_t addr, uint8_t value) {
   switch (addr) {
     case 0x400C:
-      length_counter_halt = (value >> 5) & 0x01;
-      constant_volume = (value >> 4) & 0x01;
-      volume_or_period = value & 0x0F;
+      fc_halt_or_loop = (value >> 5) & 0x01;
+      envelope.load(value);
       break;
     case 0x400E:
       mode = value >> 7;
       timer_period = noise_timer_period_table[value & 0x0F];
       break;
     case 0x400F:
-      length_counter = length_table[value >> 3];
-      envelope_start = true;
+      length_counter.load(value >> 3);
+      envelope.start = true;
       break;
-  }
-}
-
-void Noise::update_envelope() {
-  if (envelope_start) {
-    envelope_start = false;
-    decay_level_counter = 15;
-    envelope_divider = volume_or_period;
-  } else {
-    if (envelope_divider == 0) {
-      envelope_divider = volume_or_period;
-      if (decay_level_counter == 0) {
-        if (length_counter_halt) {
-          decay_level_counter = 15;
-        }
-      } else {
-        decay_level_counter--;
-      }
-    } else {
-      envelope_divider--;
-    }
-  }
-}
-
-void Noise::update_length_counter() {
-  if (length_counter > 0 && !length_counter_halt) {
-    length_counter--;
   }
 }
 
@@ -381,12 +375,8 @@ void Noise::update_timer() {
 }
 
 uint8_t Noise::output() {
-  uint8_t out = 0;
   if ((shift_register & 0x0001) || length_counter == 0) {
-    out = 0;
-  } else {
-    out = constant_volume ? volume_or_period : decay_level_counter;
+    return 0;
   }
-  // printf("%d\n", shift_register);
-  return out;
+  return envelope.volume();
 }
