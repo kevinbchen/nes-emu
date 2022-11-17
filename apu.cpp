@@ -1,6 +1,7 @@
 #include "apu.h"
 #include <cstdio>
 #include <cstring>
+#include "nes.h"
 
 namespace {
 
@@ -20,6 +21,9 @@ const uint8_t pulse_sequence[4][8] = {
 const uint8_t triangle_sequence[32] = {
     15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5,  4,  3,  2,  1,  0,
     0,  1,  2,  3,  4,  5,  6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+};
+const uint16_t noise_timer_period_table[16] = {
+    4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068,
 };
 const uint8_t length_table[32] = {
     10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
@@ -51,6 +55,9 @@ void APU::power_on() {
 }
 
 uint8_t APU::port_read(uint16_t addr) {
+  if (addr == 0x4015) {
+    return read_status();
+  }
   return 0;
 }
 
@@ -62,8 +69,12 @@ void APU::port_write(uint16_t addr, uint8_t value) {
     pulse[index].write_register(addr, value);
   } else if (addr <= 0x400B) {
     triangle.write_register(addr, value);
+  } else if (addr <= 0x400F) {
+    noise.write_register(addr, value);
   } else if (addr == 0x4015) {
     write_status(value);
+  } else if (addr == 0x4017) {
+    write_frame_counter_control(value);
   }
 }
 
@@ -78,28 +89,54 @@ void APU::write_status(uint8_t value) {
   if (!status.enable_triangle) {
     triangle.length_counter = 0;
   }
+  if (!status.enable_noise) {
+    noise.length_counter = 0;
+  }
   // TODO: clear DMC interrupt flag
+}
+
+uint8_t APU::read_status() {
+  // DMC interrupt (I), frame interrupt (F), DMC active (D), length counter > 0
+  // (N/T/2/1)
+  // TODO: DMC flags, clear irq
+  uint8_t value = 0;
+  value |= (pulse[0].length_counter > 0);
+  value |= (pulse[1].length_counter > 0) << 1;
+  value |= (triangle.length_counter > 0) << 2;
+  value |= (noise.length_counter > 0) << 3;
+  return value;
+}
+
+void APU::write_frame_counter_control(uint8_t value) {
+  frame_counter_control.raw = value;
 }
 
 void APU::tick() {
   // Update frame counter
-  if (cycle++ == frame_counter_cycles[0][step]) {
+  uint8_t mode = frame_counter_control.mode;
+  if (cycle++ == frame_counter_cycles[mode][frame_counter_step]) {
     for (int i = 0; i < 2; i++) {
       pulse[i].update_envelope();
     }
     triangle.update_linear_counter();
+    noise.update_envelope();
 
-    if (step & 0x1) {
+    if (frame_counter_step % 2 == 1) {
       for (int i = 0; i < 2; i++) {
         pulse[i].update_length_counter();
         pulse[i].update_sweep();
       }
       triangle.update_length_counter();
+      noise.update_length_counter();
     }
-    step++;
-    if (step >= 4) {
-      step = 0;
+
+    frame_counter_step++;
+    if (frame_counter_step >= 4) {
+      frame_counter_step = 0;
       cycle = 0;
+      if (mode == 0 && !frame_counter_control.irq_inhibit) {
+        nes.cpu.request_IRQ();
+      }
     }
   }
 
@@ -108,6 +145,7 @@ void APU::tick() {
     for (int i = 0; i < 2; i++) {
       pulse[i].update_timer();
     }
+    noise.update_timer();
   }
   triangle.update_timer();
 
@@ -131,10 +169,11 @@ void APU::sample() {
   if (status.enable_triangle) {
     tnd_index += triangle.output() * 3;
   }
-
+  if (status.enable_noise) {
+    tnd_index += noise.output() * 2;
+  }
   float pulse_out = pulse_table[pulse_index];
   float tnd_out = tnd_table[tnd_index];
-
   output_buffer[sample_count] = (pulse_out + tnd_out) * INT16_MAX;
   sample_count++;
 }
@@ -285,4 +324,69 @@ void Triangle::update_timer() {
 
 uint8_t Triangle::output() {
   return triangle_sequence[sequence_counter];
+}
+
+void Noise::write_register(uint16_t addr, uint8_t value) {
+  switch (addr) {
+    case 0x400C:
+      length_counter_halt = (value >> 5) & 0x01;
+      constant_volume = (value >> 4) & 0x01;
+      volume_or_period = value & 0x0F;
+      break;
+    case 0x400E:
+      mode = value >> 7;
+      timer_period = noise_timer_period_table[value & 0x0F];
+      break;
+    case 0x400F:
+      length_counter = length_table[value >> 3];
+      envelope_start = true;
+      break;
+  }
+}
+
+void Noise::update_envelope() {
+  if (envelope_start) {
+    envelope_start = false;
+    decay_level_counter = 15;
+    envelope_divider = volume_or_period;
+  } else {
+    if (envelope_divider == 0) {
+      envelope_divider = volume_or_period;
+      if (decay_level_counter == 0) {
+        if (length_counter_halt) {
+          decay_level_counter = 15;
+        }
+      } else {
+        decay_level_counter--;
+      }
+    } else {
+      envelope_divider--;
+    }
+  }
+}
+
+void Noise::update_length_counter() {
+  if (length_counter > 0 && !length_counter_halt) {
+    length_counter--;
+  }
+}
+
+void Noise::update_timer() {
+  if (timer-- == 0) {
+    timer = timer_period;
+    int bit = mode ? 6 : 1;
+    uint8_t feedback = (shift_register ^ (shift_register >> bit)) & 0x0001;
+    shift_register = (feedback << 14) | (shift_register >> 1);
+  }
+}
+
+uint8_t Noise::output() {
+  uint8_t out = 0;
+  if ((shift_register & 0x0001) || length_counter == 0) {
+    out = 0;
+  } else {
+    out = constant_volume ? volume_or_period : decay_level_counter;
+  }
+  // printf("%d\n", shift_register);
+  return out;
 }
