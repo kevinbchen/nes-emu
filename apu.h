@@ -123,6 +123,7 @@ struct DMC {
   uint16_t current_address;
   uint8_t sample_buffer;
   bool sample_buffer_filled;
+  bool interrupt_flag;
 
   uint8_t shift_register;
   uint8_t bits_left;
@@ -171,6 +172,7 @@ class APU {
   uint8_t frame_counter_step = 0;
   uint8_t frame_counter_mode = 0;
   bool frame_counter_irq_inhibit;
+  bool frame_interrupt_flag;
 
   void write_frame_counter_control(uint8_t value);
   void update_frame_counter();

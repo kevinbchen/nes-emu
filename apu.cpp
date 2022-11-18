@@ -104,19 +104,25 @@ void APU::write_status(uint8_t value) {
 }
 
 uint8_t APU::read_status() {
-  // TODO: DMC flags, clear irq
   uint8_t value = 0;
   value |= (pulse[0].length_counter > 0);
   value |= (pulse[1].length_counter > 0) << 1;
   value |= (triangle.length_counter > 0) << 2;
   value |= (noise.length_counter > 0) << 3;
   value |= (dmc.bytes_left > 0) << 4;
+  value |= frame_interrupt_flag << 6;
+  value |= dmc.interrupt_flag << 7;
+  frame_interrupt_flag = false;
+  // Note: DMC interrupt flag is -not- cleared
   return value;
 }
 
 void APU::write_frame_counter_control(uint8_t value) {
   frame_counter_mode = value >> 7;
   frame_counter_irq_inhibit = (value >> 6) & 0x01;
+  if (frame_counter_irq_inhibit) {
+    frame_interrupt_flag = false;
+  }
 
   if (frame_counter_mode == 1) {
     // Immediately clock all units
@@ -151,7 +157,7 @@ void APU::update_frame_counter() {
       frame_counter_step = 0;
       cycle = 0;
       if (frame_counter_mode == 0 && !frame_counter_irq_inhibit) {
-        nes.cpu.request_IRQ();
+        frame_interrupt_flag = true;
       }
     }
   }
@@ -175,6 +181,11 @@ void APU::tick() {
   if (sample_cycle >= cycles_per_sample) {
     sample_cycle -= cycles_per_sample;
     sample();
+  }
+
+  // Set IRQ
+  if (frame_interrupt_flag || dmc.interrupt_flag) {
+    nes.cpu.set_IRQ();
   }
 }
 
@@ -395,6 +406,9 @@ void DMC::write_register(uint16_t addr, uint8_t value) {
       irq_enabled = value >> 7;
       loop = (value >> 6) & 0x01;
       rate = dmc_rate_table[value & 0x0F];
+      if (!irq_enabled) {
+        interrupt_flag = false;
+      }
       break;
     case 0x4011:
       output_level = value & 0x7F;
@@ -409,8 +423,8 @@ void DMC::write_register(uint16_t addr, uint8_t value) {
 }
 
 void DMC::set_enabled(bool value) {
+  interrupt_flag = false;
   enabled = value;
-  // TODO: clear DMC interrupt flag
   if (enabled) {
     if (bytes_left == 0) {
       restart_sample();
@@ -431,22 +445,21 @@ void DMC::update_timer() {
     // TODO: Emulate cpu stall
     sample_buffer = nes.cpu.mem_read(current_address, false);
     sample_buffer_filled = true;
-    if (current_address++ == 0) {
+    if (++current_address == 0) {
       current_address = 0x8000;
     }
-    if (bytes_left-- == 0) {
+    if (--bytes_left == 0) {
       if (loop) {
         restart_sample();
       } else if (irq_enabled) {
-        // TODO: Set interrupt
+        interrupt_flag = true;
       }
     }
   }
 
+  // Output unit
   if (timer-- == 0) {
-    timer = rate;
-
-    // Output unit
+    timer = rate - 1;
     if (bits_left == 0) {
       // New cycle
       bits_left = 8;

@@ -33,6 +33,7 @@ class CPU {
   bool done = false;
 
   bool do_nmi = false;
+  bool irq_level = false;
   bool do_irq = false;
 
   CPU(NES& nes);
@@ -47,7 +48,7 @@ class CPU {
   uint8_t stack_pop();
 
   void request_NMI();
-  void request_IRQ();
+  void set_IRQ();
 
  private:
   enum class Flag : int { C = 0, Z, I, D, B, _, V, N };
