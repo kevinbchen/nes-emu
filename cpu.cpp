@@ -71,8 +71,11 @@ void CPU::set_n(uint8_t a) {
   P.N = (bool)(a & 0x80);
 }
 
-uint8_t CPU::mem_read(uint16_t addr) {
-  tick();
+uint8_t CPU::mem_read(uint16_t addr, bool do_tick) {
+  // TODO: Move into a separate bus class?
+  if (do_tick) {
+    tick();
+  }
   if (addr <= 0x1FFF) {
     // 2KB internal RAM, 0x800 bytes mirrored 3 times
     return RAM[addr & 0x07FF];

@@ -107,6 +107,36 @@ struct Noise {
   uint8_t output();
 };
 
+struct DMC {
+  // Properties
+  NES& nes;
+  bool enabled;
+  bool loop;
+  bool irq_enabled;
+  uint16_t rate;
+  uint16_t sample_address;
+  uint16_t sample_length;
+
+  // Counters / flags
+  uint16_t timer;
+  uint16_t bytes_left;
+  uint16_t current_address;
+  uint8_t sample_buffer;
+  bool sample_buffer_filled;
+
+  uint8_t shift_register;
+  uint8_t bits_left;
+  uint8_t output_level;
+  bool silenced;
+
+  DMC(NES& nes) : nes(nes) {}
+  void write_register(uint16_t addr, uint8_t value);
+  void set_enabled(bool value);
+  void restart_sample();
+  void update_timer();
+  uint8_t output();
+};
+
 class APU {
  public:
   int16_t output_buffer[735 + 1000];
@@ -133,6 +163,7 @@ class APU {
   Pulse pulse[2];
   Triangle triangle;
   Noise noise;
+  DMC dmc;
 
   void write_status(uint8_t value);
   uint8_t read_status();

@@ -40,7 +40,7 @@ class CPU {
   void execute();
   void print_state();
 
-  uint8_t mem_read(uint16_t addr);
+  uint8_t mem_read(uint16_t addr, bool do_tick = true);
   uint16_t mem_read16(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
   void stack_push(uint8_t value);

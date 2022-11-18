@@ -25,6 +25,9 @@ const uint8_t triangle_sequence[32] = {
 const uint16_t noise_timer_period_table[16] = {
     4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068,
 };
+const uint16_t dmc_rate_table[16] = {
+    428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54,
+};
 const uint8_t length_table[32] = {
     10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
     12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30,
@@ -36,7 +39,7 @@ float tnd_table[203];
 
 }  // namespace
 
-APU::APU(NES& nes) : nes(nes) {
+APU::APU(NES& nes) : nes(nes), dmc(nes) {
   pulse[0].sweep_negate_tweak = 1;
 
   pulse_table[0] = 0.0f;
@@ -71,6 +74,8 @@ void APU::port_write(uint16_t addr, uint8_t value) {
     triangle.write_register(addr, value);
   } else if (addr <= 0x400F) {
     noise.write_register(addr, value);
+  } else if (addr <= 0x4013) {
+    dmc.write_register(addr, value);
   } else if (addr == 0x4015) {
     write_status(value);
   } else if (addr == 0x4017) {
@@ -95,18 +100,17 @@ void APU::write_status(uint8_t value) {
   if (!noise.enabled) {
     noise.length_counter = 0;
   }
-  // TODO: DMC enable, clear DMC interrupt flag
+  dmc.set_enabled((value >> 4) & 0x01);
 }
 
 uint8_t APU::read_status() {
-  // DMC interrupt (I), frame interrupt (F), DMC active (D), length counter > 0
-  // (N/T/2/1)
   // TODO: DMC flags, clear irq
   uint8_t value = 0;
   value |= (pulse[0].length_counter > 0);
   value |= (pulse[1].length_counter > 0) << 1;
   value |= (triangle.length_counter > 0) << 2;
   value |= (noise.length_counter > 0) << 3;
+  value |= (dmc.bytes_left > 0) << 4;
   return value;
 }
 
@@ -164,6 +168,7 @@ void APU::tick() {
     noise.update_timer();
   }
   triangle.update_timer();
+  dmc.update_timer();
 
   // Sample and mix output
   sample_cycle++;
@@ -186,6 +191,9 @@ void APU::sample() {
   }
   if (noise.enabled) {
     tnd_index += noise.output() * 2;
+  }
+  if (dmc.enabled) {
+    tnd_index += dmc.output();
   }
   float pulse_out = pulse_table[pulse_index];
   float tnd_out = tnd_table[tnd_index];
@@ -379,4 +387,88 @@ uint8_t Noise::output() {
     return 0;
   }
   return envelope.volume();
+}
+
+void DMC::write_register(uint16_t addr, uint8_t value) {
+  switch (addr) {
+    case 0x4010:
+      irq_enabled = value >> 7;
+      loop = (value >> 6) & 0x01;
+      rate = dmc_rate_table[value & 0x0F];
+      break;
+    case 0x4011:
+      output_level = value & 0x7F;
+      break;
+    case 0x4012:
+      sample_address = 0xC000 + value * 64;
+      break;
+    case 0x4013:
+      sample_length = value * 16 + 1;
+      break;
+  }
+}
+
+void DMC::set_enabled(bool value) {
+  enabled = value;
+  // TODO: clear DMC interrupt flag
+  if (enabled) {
+    if (bytes_left == 0) {
+      restart_sample();
+    }
+  } else {
+    bytes_left = 0;
+  }
+}
+
+void DMC::restart_sample() {
+  current_address = sample_address;
+  bytes_left = sample_length;
+}
+
+void DMC::update_timer() {
+  // Memory reader
+  if (!sample_buffer_filled && bytes_left > 0) {
+    // TODO: Emulate cpu stall
+    sample_buffer = nes.cpu.mem_read(current_address, false);
+    sample_buffer_filled = true;
+    if (current_address++ == 0) {
+      current_address = 0x8000;
+    }
+    if (bytes_left-- == 0) {
+      if (loop) {
+        restart_sample();
+      } else if (irq_enabled) {
+        // TODO: Set interrupt
+      }
+    }
+  }
+
+  if (timer-- == 0) {
+    timer = rate;
+
+    // Output unit
+    if (bits_left == 0) {
+      // New cycle
+      bits_left = 8;
+      silenced = !sample_buffer_filled;
+      if (sample_buffer_filled) {
+        // Empty sample buffer into shift register
+        shift_register = sample_buffer;
+        sample_buffer_filled = false;
+      }
+    }
+    if (!silenced) {
+      int change = (shift_register & 0x01) ? 2 : -2;
+      int new_level = output_level + change;
+      if (new_level >= 0 && new_level <= 127) {
+        output_level = new_level;
+      }
+    }
+    shift_register >>= 1;
+    bits_left--;
+  }
+}
+
+uint8_t DMC::output() {
+  return output_level;
 }
