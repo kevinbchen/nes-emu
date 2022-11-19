@@ -50,6 +50,12 @@ APU::APU(NES& nes) : nes(nes), dmc(nes) {
   for (int i = 1; i <= 202; i++) {
     tnd_table[i] = 163.67f / (24329.0f / i + 100);
   }
+
+  debug_waveforms[0] = WaveformCapture(15, 1);
+  debug_waveforms[1] = WaveformCapture(15, 1);
+  debug_waveforms[2] = WaveformCapture(15, 1);
+  debug_waveforms[3] = WaveformCapture(15, 1);
+  debug_waveforms[4] = WaveformCapture(127, 1);
 }
 
 void APU::power_on() {
@@ -192,20 +198,24 @@ void APU::tick() {
 void APU::sample() {
   uint8_t pulse_index = 0;
   for (int i = 0; i < 2; i++) {
-    if (pulse[i].enabled) {
-      pulse_index += pulse[i].output();
-    }
+    uint8_t pulse_out = pulse[i].output();
+    pulse_index += pulse_out;
+    debug_waveforms[i].add_sample(pulse_out);
   }
   uint8_t tnd_index = 0;
-  if (triangle.enabled) {
-    tnd_index += triangle.output() * 3;
-  }
-  if (noise.enabled) {
-    tnd_index += noise.output() * 2;
-  }
-  if (dmc.enabled) {
-    tnd_index += dmc.output();
-  }
+
+  uint8_t triangle_out = triangle.output();
+  tnd_index += triangle_out * 3;
+  debug_waveforms[2].add_sample(triangle_out);
+
+  uint8_t noise_out = noise.output();
+  tnd_index += noise_out * 2;
+  debug_waveforms[3].add_sample(noise_out);
+
+  uint8_t dmc_out = dmc.output();
+  tnd_index += dmc_out;
+  debug_waveforms[4].add_sample(dmc_out);
+
   float pulse_out = pulse_table[pulse_index];
   float tnd_out = tnd_table[tnd_index];
   output_buffer[sample_count] = (pulse_out + tnd_out) * INT16_MAX;
@@ -320,7 +330,7 @@ void Pulse::update_timer() {
 }
 
 uint8_t Pulse::output() {
-  if (sweep_muted() || length_counter == 0) {
+  if (!enabled || sweep_muted() || length_counter == 0) {
     return 0;
   }
   return pulse_sequence[duty][sequence_counter] * envelope.volume();
@@ -364,6 +374,9 @@ void Triangle::update_timer() {
 }
 
 uint8_t Triangle::output() {
+  if (!enabled) {
+    return 0;
+  }
   return triangle_sequence[sequence_counter];
 }
 
@@ -394,7 +407,7 @@ void Noise::update_timer() {
 }
 
 uint8_t Noise::output() {
-  if ((shift_register & 0x0001) || length_counter == 0) {
+  if (!enabled || (shift_register & 0x0001) || length_counter == 0) {
     return 0;
   }
   return envelope.volume();
@@ -483,5 +496,8 @@ void DMC::update_timer() {
 }
 
 uint8_t DMC::output() {
+  if (!enabled) {
+    return 0;
+  }
   return output_level;
 }

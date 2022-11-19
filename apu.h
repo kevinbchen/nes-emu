@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <cstdio>
+#include "waveform_capture.h"
 
 class NES;
 
@@ -143,6 +143,8 @@ class APU {
   int16_t output_buffer[735 + 1000];
   int sample_count = 0;
 
+  WaveformCapture debug_waveforms[5];
+
   APU(NES& nes);
   void power_on();
   void output();
@@ -161,9 +163,9 @@ class APU {
   void sample();
 
   // Channels
-  Pulse pulse[2];
-  Triangle triangle;
-  Noise noise;
+  Pulse pulse[2] = {};
+  Triangle triangle = {};
+  Noise noise = {};
   DMC dmc;
 
   void write_status(uint8_t value);
@@ -171,8 +173,8 @@ class APU {
 
   uint8_t frame_counter_step = 0;
   uint8_t frame_counter_mode = 0;
-  bool frame_counter_irq_inhibit;
-  bool frame_interrupt_flag;
+  bool frame_counter_irq_inhibit = false;
+  bool frame_interrupt_flag = false;
 
   void write_frame_counter_control(uint8_t value);
   void update_frame_counter();

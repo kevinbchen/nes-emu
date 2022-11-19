@@ -18,6 +18,7 @@ set(SRC_FILES
   joypad.cpp
   ppu.cpp
   apu.cpp
+  waveform_capture.cpp
 )
 
 add_compile_definitions(_USE_MATH_DEFINES)

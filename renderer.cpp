@@ -8,7 +8,7 @@
 
 namespace {
 
-constexpr int window_width = 1024 + 32;
+constexpr int window_width = 512 + 512 + 256 + 16 * 3;
 constexpr int window_height = 480 + 256 + (16 + 16 + 3) * 2;
 constexpr int texture_size = 1024;
 
@@ -87,12 +87,11 @@ void Renderer::render() {
   ImGui::End();
 
   // Controls
-  ImGui::SetNextWindowPos(ImVec2(0, 480 + 16 + 16 + 3), ImGuiCond_Once);
-  ImGui::SetNextWindowContentSize(ImVec2(512, 256));
+  ImGui::SetNextWindowPos(ImVec2(512 + 512 + 16 * 2, 0), ImGuiCond_Once);
+  ImGui::SetNextWindowSize(ImVec2(256 + 16, window_height));
   if (ImGui::Begin("Help", nullptr, window_flags)) {
     ImGui::Text("Drag and drop to load a ROM file");
     ImGui::Text("");
-
     ImGui::Text("Controls:");
     ImGui::BulletText("[Arrow Keys] - DPAD");
     ImGui::BulletText("[Z] - A");
@@ -115,6 +114,21 @@ void Renderer::render() {
   if (ImGui::Begin("PPU Pattern Tables", nullptr, window_flags)) {
     ImGui::Image((ImTextureID)texture, ImVec2(512, 256), uv(0, 256),
                  uv(256, 256 + 128));
+  }
+  ImGui::End();
+
+  // Audio
+  ImGui::SetNextWindowPos(ImVec2(0, 480 + 16 + 16 + 3), ImGuiCond_Once);
+  ImGui::SetNextWindowContentSize(ImVec2(512, 256));
+  if (ImGui::Begin("Audio Channels", nullptr, window_flags)) {
+    ImVec2 plot_size(425.0f, 45.0f);
+    const char* channel_names[5] = {"Pulse 1", "Pulse 2", "Triangle", "Noise",
+                                    "DMC"};
+    for (int i = 0; i < 5; i++) {
+      auto& waveform = nes.apu.debug_waveforms[i];
+      ImGui::PlotLines(channel_names[i], waveform.output_buffer,
+                       waveform.buffer_size, 0, nullptr, 0, 1.0f, plot_size);
+    }
   }
   ImGui::End();
 
