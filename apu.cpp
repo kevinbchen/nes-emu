@@ -53,7 +53,7 @@ APU::APU(NES& nes) : nes(nes), dmc(nes) {
 
   debug_waveforms[0] = WaveformCapture(15, 1);
   debug_waveforms[1] = WaveformCapture(15, 1);
-  debug_waveforms[2] = WaveformCapture(15, 1);
+  debug_waveforms[2] = WaveformCapture(15, 8);
   debug_waveforms[3] = WaveformCapture(15, 1);
   debug_waveforms[4] = WaveformCapture(127, 1);
 }
@@ -61,6 +61,15 @@ APU::APU(NES& nes) : nes(nes), dmc(nes) {
 void APU::power_on() {
   cycle = 0;
   memset(output_buffer, 0x00, sizeof(output_buffer));
+
+  port_write(0x4017, 0x00);
+  port_write(0x4015, 0x00);
+  for (uint16_t addr = 0x4000; addr <= 0x4013; addr++) {
+    port_write(addr, 0x00);
+  }
+  triangle.sequence_counter = 0;
+  noise.shift_register = 0x0001;
+  dmc.output_level &= 0x01;
 }
 
 uint8_t APU::port_read(uint16_t addr) {

@@ -14,6 +14,12 @@ void PPU::power_on() {
   PPUCTRL.raw = 0x00;
   PPUMASK.raw = 0x00;
   PPUSTATUS.raw = 0x00;
+  OAMADDR = 0x00;
+  write_toggle = false;
+  vram_addr.raw = 0x0000;
+  temp_vram_addr.raw = 0x0000;
+  fine_x_scroll = 0;
+  bus_latch = 0x00;
 
   memset(CIRAM, 0x00, 0x800);
   memset(CGRAM, 0x00, 32);
