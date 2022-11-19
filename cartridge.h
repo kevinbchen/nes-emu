@@ -18,9 +18,9 @@ class Mapper {
   int pgr_map[4];           // 8kb (0x2000) blocks
   int chr_map[8];           // 1kb (0x400) blocks
 
-  int num_ram_banks;
-  bool has_trainer;
-  bool has_ram;
+  int num_ram_banks = 0;
+  bool has_trainer = false;
+  bool has_ram = false;
   MirrorMode mirror_mode = MirrorMode::VERTICAL;
 
   Mapper(ROMData& rom_data);

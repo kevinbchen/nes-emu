@@ -84,8 +84,8 @@ class Mapper0 : public Mapper {
 
 class Mapper1 : public Mapper {
  public:
-  uint8_t shift_register;
-  uint8_t control;
+  uint8_t shift_register = 0x10;
+  uint8_t control = 0;
 
   Mapper1(ROMData& rom_data) : Mapper(rom_data) {
     set_pgr_map(0x4000, 0, 0);

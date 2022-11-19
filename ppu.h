@@ -68,12 +68,11 @@ class PPU {
     BitField16<10, 2> nt_select;
     BitField16<12, 3> fine_y_scroll;
   };
-
   Addr vram_addr;
   Addr temp_vram_addr;
-  uint8_t fine_x_scroll;
+  uint8_t fine_x_scroll = 0;
   bool write_toggle = false;
-  uint8_t bus_latch;
+  uint8_t bus_latch = 0;
 
   union {
     uint8_t raw;
@@ -109,12 +108,12 @@ class PPU {
   } PPUSTATUS;
   uint8_t read_PPUSTATUS();
 
-  uint8_t OAMADDR;
+  uint8_t OAMADDR = 0;
 
   void write_PPUSCROLL(uint8_t value);
   void write_PPUADDR(uint8_t value);
 
-  uint8_t data_buffer;
+  uint8_t data_buffer = 0;
   uint8_t read_PPUDATA();
   void write_PPUDATA(uint8_t value);
 

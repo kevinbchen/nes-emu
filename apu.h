@@ -7,7 +7,7 @@ class NES;
 struct LengthCounter {
   bool& enabled;
   bool& halt;
-  uint8_t counter;
+  uint8_t counter = 0;
 
   LengthCounter(bool& enabled, bool& halt) : enabled(enabled), halt(halt) {}
   operator uint8_t() const { return counter; }
@@ -21,11 +21,11 @@ struct LengthCounter {
 
 struct Envelope {
   bool& loop;
-  bool constant_volume;
-  uint8_t volume_or_period;
-  bool start;
-  uint8_t decay_level_counter;
-  uint8_t divider;
+  bool constant_volume = false;
+  uint8_t volume_or_period = 0;
+  bool start = false;
+  uint8_t decay_level_counter = 0;
+  uint8_t divider = 0;
 
   Envelope(bool& loop) : loop(loop) {}
   void load(uint8_t data);
@@ -35,22 +35,22 @@ struct Envelope {
 
 struct Pulse {
   // Properties
-  bool enabled;
-  uint8_t duty;
-  bool fc_halt_or_loop;
-  bool sweep;
-  uint8_t sweep_period;
-  bool sweep_negate;
-  uint8_t sweep_negate_tweak;
-  uint8_t sweep_shift;
-  uint16_t timer_period;
+  bool enabled = false;
+  uint8_t duty = 0;
+  bool fc_halt_or_loop = false;
+  bool sweep = false;
+  uint8_t sweep_period = 0;
+  bool sweep_negate = false;
+  uint8_t sweep_negate_tweak = 0;
+  uint8_t sweep_shift = 0;
+  uint16_t timer_period = 0;
 
   // Counters / flags
-  uint16_t timer;
-  uint8_t sequence_counter;
-  uint16_t target_period;
-  uint8_t sweep_divider;
-  bool sweep_reload;
+  uint16_t timer = 0;
+  uint8_t sequence_counter = 0;
+  uint16_t target_period = 0;
+  uint8_t sweep_divider = 0;
+  bool sweep_reload = false;
   LengthCounter length_counter;
   Envelope envelope;
 
@@ -66,16 +66,16 @@ struct Pulse {
 
 struct Triangle {
   // Properties
-  bool enabled;
-  bool fc_halt_or_linear_control;
-  uint8_t linear_counter_period;
-  uint16_t timer_period;
+  bool enabled = false;
+  bool fc_halt_or_linear_control = false;
+  uint8_t linear_counter_period = 0;
+  uint16_t timer_period = 0;
 
   // Counters / flags
-  uint16_t timer;
-  uint8_t sequence_counter;
-  uint8_t linear_counter;
-  bool linear_counter_reload;
+  uint16_t timer = 0;
+  uint8_t sequence_counter = 0;
+  uint8_t linear_counter = 0;
+  bool linear_counter_reload = false;
   LengthCounter length_counter;
 
   Triangle() : length_counter(enabled, fc_halt_or_linear_control) {}
@@ -88,13 +88,13 @@ struct Triangle {
 
 struct Noise {
   // Properties
-  bool enabled;
-  bool fc_halt_or_loop;
-  bool mode;
-  uint8_t timer_period;
+  bool enabled = false;
+  bool fc_halt_or_loop = false;
+  bool mode = false;
+  uint8_t timer_period = 0;
 
   // Counters / flags
-  uint16_t timer;
+  uint16_t timer = 0;
   uint16_t shift_register = 0x0001;
   LengthCounter length_counter;
   Envelope envelope;
@@ -110,25 +110,25 @@ struct Noise {
 struct DMC {
   // Properties
   NES& nes;
-  bool enabled;
-  bool loop;
-  bool irq_enabled;
-  uint16_t rate;
-  uint16_t sample_address;
-  uint16_t sample_length;
+  bool enabled = false;
+  bool loop = false;
+  bool irq_enabled = false;
+  uint16_t rate = 0;
+  uint16_t sample_address = 0;
+  uint16_t sample_length = 0;
 
   // Counters / flags
-  uint16_t timer;
-  uint16_t bytes_left;
-  uint16_t current_address;
-  uint8_t sample_buffer;
-  bool sample_buffer_filled;
-  bool interrupt_flag;
+  uint16_t timer = 0;
+  uint16_t bytes_left = 0;
+  uint16_t current_address = 0;
+  uint8_t sample_buffer = 0;
+  bool sample_buffer_filled = false;
+  bool interrupt_flag = false;
 
-  uint8_t shift_register;
-  uint8_t bits_left;
-  uint8_t output_level;
-  bool silenced;
+  uint8_t shift_register = 0;
+  uint8_t bits_left = 0;
+  uint8_t output_level = 0;
+  bool silenced = false;
 
   DMC(NES& nes) : nes(nes) {}
   void write_register(uint16_t addr, uint8_t value);
@@ -142,7 +142,6 @@ class APU {
  public:
   int16_t output_buffer[735 + 1000];
   int sample_count = 0;
-
   WaveformCapture debug_waveforms[5];
 
   APU(NES& nes);
@@ -163,9 +162,9 @@ class APU {
   void sample();
 
   // Channels
-  Pulse pulse[2] = {};
-  Triangle triangle = {};
-  Noise noise = {};
+  Pulse pulse[2];
+  Triangle triangle;
+  Noise noise;
   DMC dmc;
 
   void write_status(uint8_t value);
