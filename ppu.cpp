@@ -24,7 +24,7 @@ void PPU::power_on() {
   memset(CIRAM, 0x00, 0x800);
   memset(CGRAM, 0x00, 32);
   memset(OAM, 0x00, 256);
-  memset(pixels, 0x00, 240 * 256 * 3);
+  clear_pixels();
 }
 
 uint16_t PPU::nt_mirror_addr(uint16_t addr) {
@@ -390,6 +390,10 @@ void PPU::load_rendering_oam() {
     entry.data_lo = mem_read(pt_addr_base | y);
     entry.data_hi = mem_read(pt_addr_base | 0x0008 | y);
   }
+}
+
+void PPU::clear_pixels() {
+  memset(pixels, 0x00, 240 * 256 * 3);
 }
 
 void PPU::render_pixel() {

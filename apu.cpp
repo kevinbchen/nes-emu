@@ -505,8 +505,7 @@ void DMC::update_timer() {
 }
 
 uint8_t DMC::output() {
-  if (!enabled) {
-    return 0;
-  }
+  // Note: The output level is sent to the mixer whether the channel is enabled
+  // or not
   return output_level;
 }

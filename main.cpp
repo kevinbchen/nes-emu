@@ -23,6 +23,7 @@ void loop() {
   }
   audio.output();
   renderer.render();
+  nes.ppu.clear_pixels();
 }
 
 int main(int argc, char* agv[]) {

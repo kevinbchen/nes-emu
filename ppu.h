@@ -36,6 +36,7 @@ class PPU {
 
   void tick();
   bool rendering_enabled();
+  void clear_pixels();
   void render_pixel();
   void render_scanline();
 
