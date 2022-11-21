@@ -29,8 +29,8 @@ target_link_libraries(nes-emu PRIVATE imgui)
 if (EMSCRIPTEN)
   set_target_properties(nes-emu
         PROPERTIES SUFFIX ".html"
-        COMPILE_FLAGS "-fexceptions"
-        LINK_FLAGS "-s USE_GLFW=3 -s USE_WEBGL2=1 -fexceptions \
+        COMPILE_FLAGS "-s USE_SDL=2 -fexceptions"
+        LINK_FLAGS "-s USE_GLFW=3 -s USE_WEBGL2=1 -s USE_SDL=2 -fexceptions \
                     --preload-file ${CMAKE_SOURCE_DIR}/roms/nestest.nes@/roms/nestest.nes \
                     --shell-file ${CMAKE_SOURCE_DIR}/template.html")
 else()
@@ -46,13 +46,17 @@ else()
   FetchContent_MakeAvailable(glfw)
 
   FetchContent_Declare(
-    openal-soft
-    GIT_REPOSITORY https://github.com/kcat/openal-soft
-    GIT_TAG 1.22.2
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL
+    GIT_TAG release-2.24.0
     GIT_PROGRESS TRUE
   )
-  FetchContent_MakeAvailable(openal-soft)
+  FetchContent_MakeAvailable(SDL2)
 
-  target_link_libraries(nes-emu PRIVATE glfw opengl32 glad OpenAL)
-  target_include_directories(nes-emu PRIVATE ${glfw_SOURCE_DIR}/include ${openal-soft_SOURCE_DIR}/include)
+  target_link_libraries(nes-emu PRIVATE 
+    glfw opengl32 glad
+    SDL2main SDL2-static)
+  target_include_directories(nes-emu PRIVATE 
+    ${glfw_SOURCE_DIR}/include
+    ${sdl2_SOURCE_DIRS}/include)
 endif()

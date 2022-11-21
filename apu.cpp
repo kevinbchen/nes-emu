@@ -5,9 +5,7 @@
 
 namespace {
 
-constexpr int sample_rate = 44100;
-constexpr float cycles_per_sample = 1789773.0f / sample_rate;
-
+constexpr int cpu_rate = 1789773;
 const int frame_counter_cycles[2][4] = {
     {7457, 14913, 22371, 29829},
     {7457, 14913, 22371, 37281},
@@ -40,6 +38,8 @@ float tnd_table[203];
 }  // namespace
 
 APU::APU(NES& nes) : nes(nes), dmc(nes) {
+  set_sample_rate(44100);
+
   pulse[0].sweep_negate_tweak = 1;
 
   pulse_table[0] = 0.0f;
@@ -233,6 +233,11 @@ void APU::sample() {
 
 void APU::output() {
   sample_count = 0;
+}
+
+void APU::set_sample_rate(int rate) {
+  sample_rate = rate;
+  cycles_per_sample = (float)cpu_rate / sample_rate;
 }
 
 void LengthCounter::load(uint8_t index) {

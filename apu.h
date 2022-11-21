@@ -147,6 +147,7 @@ class APU {
   APU(NES& nes);
   void power_on();
   void output();
+  void set_sample_rate(int rate);
 
   uint8_t port_read(uint16_t addr);
   void port_write(uint16_t addr, uint8_t value);
@@ -158,6 +159,8 @@ class APU {
 
   int cycle = 0;
   float sample_cycle = 0;
+  int sample_rate;
+  float cycles_per_sample;
 
   void sample();
 

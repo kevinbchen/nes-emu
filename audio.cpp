@@ -1,63 +1,59 @@
 #include "audio.h"
-#include <cmath>
 #include <cstdio>
-#include <stdexcept>
+
+namespace {
+constexpr int nominal_frequency = 44100;
+constexpr float max_frequency_difference = 0.02f;
+constexpr int target_queue_size = nominal_frequency / 60 * 3;
+}  // namespace
 
 bool Audio::init() {
-  device = alcOpenDevice(nullptr);
-  if (!device) {
-    fprintf(stderr, "Could not open audio device\n");
-    return false;
-  }
-  context = alcCreateContext(device, nullptr);
-  if (!alcMakeContextCurrent(context)) {
-    fprintf(stderr, "Could not create audio context: %d\n",
-            alcGetError(device));
+  if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     return false;
   }
 
-  alGenSources((ALuint)1, &source);
-  alSourcef(source, AL_PITCH, 1);
-  alSourcef(source, AL_GAIN, 1);
-  alSource3f(source, AL_POSITION, 0, 0, 0);
-  alSource3f(source, AL_VELOCITY, 0, 0, 0);
-  alSourcei(source, AL_LOOPING, AL_FALSE);
-
-  alGenBuffers((ALuint)4, buffers);
-
-  // Queue up buffers
-  uint16_t data[735];
-  for (int j = 0; j < 4; j++) {
-    for (int i = 0; i < 735; ++i) {
-      data[i] = sin(2 * M_PI * 440 * i * (j + 1) / 44100) * SHRT_MAX;
-    }
-    alBufferData(buffers[j], AL_FORMAT_MONO16, data, sizeof(data), 44100);
-    alSourceQueueBuffers(source, 1, &buffers[j]);
+  SDL_AudioSpec audio_spec;
+  SDL_zero(audio_spec);
+  audio_spec.freq = nominal_frequency;
+  audio_spec.format = AUDIO_S16SYS;
+  audio_spec.channels = 1;
+  audio_spec.samples = 1024;
+  audio_spec.callback = NULL;
+  if ((audio_device = SDL_OpenAudioDevice(NULL, 0, &audio_spec, NULL, 0)) < 0) {
+    fprintf(stderr, "SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+    return false;
   }
-  alSourcePlay(source);
+  SDL_PauseAudioDevice(audio_device, 0);
 
   return true;
 }
 
+void Audio::destroy() {
+  SDL_CloseAudioDevice(audio_device);
+  SDL_Quit();
+}
+
 void Audio::output() {
-  // TODO: Need to properly deal with video/audio clock syncing and buffering
+  // Exponential moving average of audio queue size
+  int queue_size = SDL_GetQueuedAudioSize(audio_device) / sizeof(int16_t);
+  constexpr float alpha = 0.1f;
+  average_queue_size =
+      (int)(queue_size * alpha + average_queue_size * (1.0f - alpha));
 
-  ALint buffers_processed = 0;
-  alGetSourcei(source, AL_BUFFERS_PROCESSED, &buffers_processed);
-  if (buffers_processed > 0) {
-    ALuint buffer;
-    alSourceUnqueueBuffers(source, 1, &buffer);
+  // Adjust sample frequency to try and maintain a constant queue size
+  float diff =
+      (float)(average_queue_size - target_queue_size) / target_queue_size;
+  diff = std::min(std::max(diff, -1.0f), 1.0f);
+  int sample_rate =
+      (int)(nominal_frequency * (1.0f - diff * max_frequency_difference));
+  nes.apu.set_sample_rate(sample_rate);
 
-    alBufferData(buffer, AL_FORMAT_MONO16, nes.apu.output_buffer,
-                 nes.apu.sample_count * sizeof(int16_t), 44100);
-
-    alSourceQueueBuffers(source, 1, &buffer);
-
-    ALint source_state;
-    alGetSourcei(source, AL_SOURCE_STATE, &source_state);
-    if (source_state != AL_PLAYING) {
-      alSourcePlay(source);
-    }
+  if (queue_size > target_queue_size * 2) {
+    // Queue is too large, just skip this frame's audio to catch up faster
+  } else {
+    SDL_QueueAudio(audio_device, nes.apu.output_buffer,
+                   nes.apu.sample_count * sizeof(int16_t));
   }
   nes.apu.output();
 }

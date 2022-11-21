@@ -1,6 +1,5 @@
 #pragma once
-#include <AL/al.h>
-#include <AL/alc.h>
+#include <SDL.h>
 #include "nes.h"
 
 class Audio {
@@ -8,15 +7,12 @@ class Audio {
   Audio(NES& nes) : nes(nes) {}
 
   bool init();
+  void destroy();
   void output();
 
  private:
   NES& nes;
 
-  ALCdevice* device;
-  ALCcontext* context;
-  ALuint source;
-  ALuint buffers[4];
-
-  int buffer_index = 0;
+  SDL_AudioDeviceID audio_device;
+  int average_queue_size = 0;
 };
