@@ -8,18 +8,14 @@
 
 class NES {
  public:
-  NES() : cpu(*this), ppu(*this), apu(*this) {}
-
   CPU cpu;
   PPU ppu;
   APU apu;
   Cartridge cartridge;
   Joypad joypad;
+  bool loaded = false;
 
-  void load(const char* filename) {
-    cartridge.load(filename);
-    cpu.power_on();
-    ppu.power_on();
-    apu.power_on();
-  }
+  NES() : cpu(*this), ppu(*this), apu(*this) {}
+  void load(const char* filename);
+  void run_frame();
 };

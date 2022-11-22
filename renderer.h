@@ -11,11 +11,11 @@
 class Renderer {
  public:
   Renderer(NES& nes) : nes(nes) {}
-
   bool init();
   void destroy();
   void render();
   bool done();
+  double time();
 
  private:
   NES& nes;

@@ -5,7 +5,6 @@
 class Audio {
  public:
   Audio(NES& nes) : nes(nes) {}
-
   bool init();
   void destroy();
   void output();

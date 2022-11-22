@@ -227,11 +227,12 @@ void APU::sample() {
 
   float pulse_out = pulse_table[pulse_index];
   float tnd_out = tnd_table[tnd_index];
-  output_buffer[sample_count] = (pulse_out + tnd_out) * INT16_MAX;
-  sample_count++;
+  if (sample_count < max_output_buffer_size) {
+    output_buffer[sample_count++] = (pulse_out + tnd_out) * INT16_MAX;
+  }
 }
 
-void APU::output() {
+void APU::clear_output_buffer() {
   sample_count = 0;
 }
 

@@ -12,42 +12,46 @@
 NES nes;
 Renderer renderer(nes);
 Audio audio(nes);
+double last_time = 0.0f;
+double accumulator = 0.0f;
 
 void loop() {
-  while (true) {
-    nes.cpu.execute();
-    if (nes.ppu.frame_ready) {
-      nes.ppu.frame_ready = false;
-      break;
-    }
+  double time = renderer.time();
+  double delta = time - last_time;
+  last_time = time;
+  constexpr double target_frame_time = 1.0 / 60.0;
+  // Set delta to exactly 1 / 60 if within 3%
+  if (std::abs(delta - target_frame_time) / target_frame_time <= 0.03) {
+    delta = target_frame_time;
   }
-  audio.output();
+  accumulator = std::min(accumulator + delta, target_frame_time * 3);
+  while (accumulator >= target_frame_time) {
+    nes.run_frame();
+    audio.output();
+    accumulator -= target_frame_time;
+  }
   renderer.render();
-  nes.ppu.clear_pixels();
 }
 
 int main(int argc, char* agv[]) {
-  try {
-    if (!renderer.init()) {
-      return -1;
-    }
-    if (!audio.init()) {
-      return -1;
-    }
+  if (!renderer.init()) {
+    return -1;
+  }
+  if (!audio.init()) {
+    return -1;
+  }
 
-    nes.load("roms/nestest.nes");
+  nes.load("roms/nestest.nes");
 
 #ifdef __EMSCRIPTEN__
-    emscripten_set_main_loop(&loop, 0, 1);
+  emscripten_set_main_loop(&loop, 0, 1);
 #else
-    while (!renderer.done()) {
-      loop();
-    }
+  while (!renderer.done()) {
+    loop();
+  }
 #endif
 
-    renderer.destroy();
-  } catch (std::runtime_error& e) {
-    printf("%s\n", e.what());
-  }
+  renderer.destroy();
+  audio.destroy();
   return 0;
 }

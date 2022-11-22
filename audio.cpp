@@ -55,5 +55,5 @@ void Audio::output() {
     SDL_QueueAudio(audio_device, nes.apu.output_buffer,
                    nes.apu.sample_count * sizeof(int16_t));
   }
-  nes.apu.output();
+  nes.apu.clear_output_buffer();
 }

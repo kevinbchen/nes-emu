@@ -1,7 +1,7 @@
 #include "waveform_capture.h"
 
 WaveformCapture::WaveformCapture(uint8_t max_value, uint8_t trigger_level)
-    : max_value(max_value), trigger_level(trigger_level) {}
+    : max_value(max_value), trigger_level(trigger_level), output_buffer() {}
 
 void WaveformCapture::add_sample(uint8_t value) {
   buffer[buffer_index] = value;

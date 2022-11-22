@@ -3,7 +3,7 @@
 
 class WaveformCapture {
  public:
-  static const int buffer_size = 735;
+  static constexpr int buffer_size = 735;
   float output_buffer[buffer_size];
 
   WaveformCapture() {}

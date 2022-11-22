@@ -13,11 +13,12 @@ add_subdirectory(libs/glad)
 add_subdirectory(libs/imgui)
 
 set(SRC_FILES 
+  apu.cpp
   cartridge.cpp
   cpu.cpp
   joypad.cpp
+  nes.cpp
   ppu.cpp
-  apu.cpp
   waveform_capture.cpp
 )
 

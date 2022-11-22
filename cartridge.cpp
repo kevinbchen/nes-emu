@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
-#include <string>
 
 Mapper::Mapper(ROMData& rom_data)
     : pgr_rom(std::move(rom_data.pgr_rom)),
@@ -68,6 +67,16 @@ void Mapper::set_chr_map(uint16_t bank_size,
     }
   }
 }
+
+// Dummy mapper for load failures
+class MapperDummy : public Mapper {
+ public:
+  MapperDummy() {}
+  uint8_t mem_read(uint16_t addr) { return 0; }
+  void mem_write(uint16_t addr, uint8_t value) {}
+  uint8_t chr_mem_read(uint16_t addr) { return 0; }
+  void chr_mem_write(uint16_t addr, uint8_t value) {}
+};
 
 class Mapper0 : public Mapper {
  public:
@@ -208,18 +217,21 @@ class Mapper3 : public Mapper0 {
   }
 };
 
-void Cartridge::load(const char* filename) {
+bool Cartridge::load(const char* filename) {
   printf("Loading %s...\n", filename);
+  mapper = std::make_unique<MapperDummy>();
   std::ifstream file(filename, std::ios::in | std::ios::binary);
   if (!file) {
-    throw std::runtime_error("Could not load cartridge file");
+    fprintf(stderr, "Could not load cartridge file %s\n", filename);
+    return false;
   }
 
   ROMData rom_data;
   file.read(rom_data.header, 16);
   if (!(rom_data.header[0] == 'N' && rom_data.header[1] == 'E' &&
         rom_data.header[2] == 'S' && rom_data.header[3] == 0x1A)) {
-    throw std::runtime_error("Invalid cartridge file");
+    fprintf(stderr, "Invalid cartridge header\n");
+    return false;
   }
 
   int num_pgr_banks = rom_data.header[4];
@@ -255,14 +267,16 @@ void Cartridge::load(const char* filename) {
       mapper = std::make_unique<Mapper3>(rom_data);
       break;
     default:
-      throw std::runtime_error("Unsupported mapper type " +
-                               std::to_string(mapper_num));
+      fprintf(stderr, "Unsupported mapper type %d\n", mapper_num);
+      return false;
   }
 
   if (mapper->has_trainer) {
     // TODO
-    throw std::runtime_error("Trainer unhandled");
+    fprintf(stderr, "Trainer unhandled\n");
+    return false;
   }
+  return true;
 }
 
 uint8_t Cartridge::mem_read(uint16_t addr) {

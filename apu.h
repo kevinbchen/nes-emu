@@ -140,13 +140,14 @@ struct DMC {
 
 class APU {
  public:
-  int16_t output_buffer[735 + 1000];
+  static constexpr int max_output_buffer_size = 1000;
+  int16_t output_buffer[max_output_buffer_size];
   int sample_count = 0;
   WaveformCapture debug_waveforms[5];
 
   APU(NES& nes);
   void power_on();
-  void output();
+  void clear_output_buffer();
   void set_sample_rate(int rate);
 
   uint8_t port_read(uint16_t addr);

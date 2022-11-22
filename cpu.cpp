@@ -14,6 +14,10 @@ void CPU::power_on() {
   memset(RAM, 0, 0x0800);
   PC = mem_read16(0xFFFC);
   cycles = 7;
+
+  do_nmi = false;
+  irq_level = false;
+  do_irq = false;
 }
 
 void CPU::execute() {

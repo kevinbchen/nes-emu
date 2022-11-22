@@ -302,6 +302,10 @@ bool Renderer::done() {
   return glfwWindowShouldClose(window);
 }
 
+double Renderer::time() {
+  return glfwGetTime();
+}
+
 void Renderer::set_pixels(uint8_t* pixels, int x, int y, int w, int h) {
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE,

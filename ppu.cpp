@@ -16,6 +16,7 @@ void PPU::power_on() {
   PPUSTATUS.raw = 0x00;
   OAMADDR = 0x00;
   write_toggle = false;
+  data_buffer = 0x00;
   vram_addr.raw = 0x0000;
   temp_vram_addr.raw = 0x0000;
   fine_x_scroll = 0;

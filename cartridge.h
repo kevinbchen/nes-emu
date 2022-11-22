@@ -23,6 +23,7 @@ class Mapper {
   bool has_ram = false;
   MirrorMode mirror_mode = MirrorMode::VERTICAL;
 
+  Mapper() = default;
   Mapper(ROMData& rom_data);
   virtual ~Mapper() = default;
 
@@ -40,8 +41,7 @@ class Cartridge {
   std::unique_ptr<Mapper> mapper;
 
   Cartridge() {}
-
-  void load(const char* filename);
+  bool load(const char* filename);
 
   uint8_t mem_read(uint16_t addr);
   void mem_write(uint16_t addr, uint8_t value);
