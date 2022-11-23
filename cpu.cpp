@@ -16,8 +16,10 @@ void CPU::power_on() {
   cycles = 7;
 
   do_nmi = false;
-  irq_level = false;
   do_irq = false;
+  for (int i = 0; i < IRQType::Count; i++) {
+    irq_levels[i] = false;
+  }
 }
 
 void CPU::execute() {
@@ -135,14 +137,6 @@ uint8_t CPU::stack_pop() {
 }
 
 void CPU::tick() {
-  if (irq_level) {
-    // do_irq is set 1 cycle after irq_level
-    // TODO: This still doesn't work quite right - see jitter test cases from
-    // apu_test.nes
-    do_irq = true;
-  }
-  irq_level = false;
-
   nes.ppu.tick();
   nes.ppu.tick();
   nes.ppu.tick();
@@ -151,12 +145,23 @@ void CPU::tick() {
   cycles++;
 }
 
-void CPU::request_NMI() {
+void CPU::request_nmi() {
   do_nmi = true;
 }
 
-void CPU::set_IRQ() {
-  irq_level = true;
+void CPU::set_irq(IRQType::Values type, bool value) {
+  // TODO: IRQ timing isn't entirely accurate - see jitter test cases from
+  // apu_test.nes
+  if (irq_levels[type] != value) {
+    irq_levels[type] = value;
+    for (int i = 0; i < IRQType::Count; i++) {
+      if (irq_levels[i]) {
+        do_irq = true;
+        return;
+      }
+    }
+    do_irq = false;
+  }
 }
 
 void CPU::NMI() {
@@ -174,7 +179,6 @@ void CPU::IRQ(bool brk) {
   stack_push(PC & 0xFF);
   stack_push(P.raw | (brk ? 0x10 : 0x00));
   P.I = true;
-  do_irq = false;
   tick();
   if (!brk) {
     tick();

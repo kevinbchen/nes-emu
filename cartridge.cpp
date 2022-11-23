@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
+#include "nes.h"
 
 Mapper::Mapper(ROMData& rom_data)
     : pgr_rom(std::move(rom_data.pgr_rom)),
@@ -66,6 +67,10 @@ void Mapper::set_chr_map(uint16_t bank_size,
       chr_map[index] = addr;
     }
   }
+}
+
+void Mapper::set_nes(NES* nes) {
+  this->nes = nes;
 }
 
 // Dummy mapper for load failures
@@ -206,7 +211,7 @@ class Mapper2 : public Mapper {
 
 class Mapper3 : public Mapper0 {
  public:
-  Mapper3(ROMData& rom_data) : Mapper0(rom_data) { set_chr_map(0x2000, 0, 0); }
+  Mapper3(ROMData& rom_data) : Mapper0(rom_data) {}
 
   void mem_write(uint16_t addr, uint8_t value) override {
     Mapper::mem_write(addr, value);
@@ -216,6 +221,116 @@ class Mapper3 : public Mapper0 {
     }
   }
 };
+
+class Mapper4 : public Mapper0 {
+ public:
+  uint8_t bank_select = 0;
+  uint8_t bank_registers[8] = {0};
+  uint8_t irq_period = 0;
+  bool irq_enabled = false;
+  uint8_t irq_counter = 0;
+
+  Mapper4(ROMData& rom_data) : Mapper0(rom_data) {
+    set_pgr_map(0x2000, 3, pgr_rom.size() / 0x2000 - 1);
+    set_banks();
+  }
+
+  void mem_write(uint16_t addr, uint8_t value) override {
+    if (addr < 0x8000) {
+      Mapper::mem_write(addr, value);
+      return;
+    }
+    switch (addr & 0xE001) {
+      case 0x8000:
+        bank_select = value;
+        set_banks();
+        break;
+      case 0x8001:
+        bank_registers[bank_select & 0x07] = value;
+        set_banks();
+        break;
+      case 0xA000:
+        mirror_mode =
+            value & 0x01 ? MirrorMode::HORIZONTAL : MirrorMode::VERTICAL;
+        break;
+      case 0xA001:
+        // RAM protect, not implemented
+        break;
+      case 0xC000:
+        irq_period = value;
+        break;
+      case 0xC001:
+        irq_counter = 0;
+        break;
+      case 0xE000:
+        irq_enabled = false;
+        nes->cpu.set_irq(IRQType::MMC3, false);
+        break;
+      case 0xE001:
+        irq_enabled = true;
+        break;
+    }
+  }
+
+  void signal_scanline() override {
+    if (irq_counter == 0) {
+      irq_counter = irq_period;
+    } else {
+      irq_counter--;
+      if (irq_counter == 0 && irq_enabled) {
+        nes->cpu.set_irq(IRQType::MMC3, true);
+      }
+    }
+  }
+
+  void set_banks() {
+    uint8_t chr_mode = (bank_select >> 7) & 0x01;
+    uint8_t pgr_mode = (bank_select >> 6) & 0x01;
+    // CHR banks
+    if (chr_mode == 0) {
+      set_chr_map(0x800, 0, bank_registers[0] >> 1);
+      set_chr_map(0x800, 1, bank_registers[1] >> 1);
+      for (int i = 0; i < 4; i++) {
+        set_chr_map(0x400, 4 + i, bank_registers[i + 2]);
+      }
+    } else {
+      for (int i = 0; i < 4; i++) {
+        set_chr_map(0x400, i, bank_registers[i + 2]);
+      }
+      set_chr_map(0x800, 2, bank_registers[0] >> 1);
+      set_chr_map(0x800, 3, bank_registers[1] >> 1);
+    }
+    // PGR banks
+    if (pgr_mode == 0) {
+      set_pgr_map(0x2000, 0, bank_registers[6] & 0x3F);
+      set_pgr_map(0x2000, 1, bank_registers[7] & 0x3F);
+      set_pgr_map(0x2000, 2, pgr_rom.size() / 0x2000 - 2);
+    } else {
+      set_pgr_map(0x2000, 0, pgr_rom.size() / 0x2000 - 2);
+      set_pgr_map(0x2000, 1, bank_registers[7] & 0x3F);
+      set_pgr_map(0x2000, 2, bank_registers[6] & 0x3F);
+    }
+  }
+};
+
+namespace {
+std::unique_ptr<Mapper> get_mapper(int mapper_num, ROMData& rom_data) {
+  switch (mapper_num) {
+    case 0:
+      return std::make_unique<Mapper0>(rom_data);
+    case 1:
+      return std::make_unique<Mapper1>(rom_data);
+    case 2:
+      return std::make_unique<Mapper2>(rom_data);
+    case 3:
+      return std::make_unique<Mapper3>(rom_data);
+    case 4:
+      return std::make_unique<Mapper4>(rom_data);
+    default:
+      return nullptr;
+  }
+}
+}  // namespace
 
 bool Cartridge::load(const char* filename) {
   printf("Loading %s...\n", filename);
@@ -253,23 +368,12 @@ bool Cartridge::load(const char* filename) {
               0x2000);  // 8kb
   }
 
-  switch (mapper_num) {
-    case 0:
-      mapper = std::make_unique<Mapper0>(rom_data);
-      break;
-    case 1:
-      mapper = std::make_unique<Mapper1>(rom_data);
-      break;
-    case 2:
-      mapper = std::make_unique<Mapper2>(rom_data);
-      break;
-    case 3:
-      mapper = std::make_unique<Mapper3>(rom_data);
-      break;
-    default:
-      fprintf(stderr, "Unsupported mapper type %d\n", mapper_num);
-      return false;
+  mapper = get_mapper(mapper_num, rom_data);
+  if (mapper == nullptr) {
+    fprintf(stderr, "Unsupported mapper type %d\n", mapper_num);
+    return false;
   }
+  mapper->set_nes(&nes);
 
   if (mapper->has_trainer) {
     // TODO
@@ -297,4 +401,8 @@ void Cartridge::chr_mem_write(uint16_t addr, uint8_t value) {
 
 MirrorMode Cartridge::get_mirror_mode() {
   return mapper->mirror_mode;
+}
+
+void Cartridge::signal_scanline() {
+  mapper->signal_scanline();
 }

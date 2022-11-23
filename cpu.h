@@ -2,9 +2,16 @@
 #include <cstdint>
 #include "bitfield.h"
 
-class NES;
+struct IRQType {
+  enum Values {
+    APU_DMC = 0,
+    APU_FRAME_COUNTER,
+    MMC3,
+    Count,
+  };
+};
 
-// 2A03 CPU
+class NES;
 class CPU {
  public:
   NES& nes;
@@ -32,10 +39,6 @@ class CPU {
   int cycles = 7;
   bool done = false;
 
-  bool do_nmi = false;
-  bool irq_level = false;
-  bool do_irq = false;
-
   CPU(NES& nes);
   void power_on();
   void execute();
@@ -47,11 +50,10 @@ class CPU {
   void stack_push(uint8_t value);
   uint8_t stack_pop();
 
-  void request_NMI();
-  void set_IRQ();
+  void request_nmi();
+  void set_irq(IRQType::Values type, bool value);
 
  private:
-  enum class Flag : int { C = 0, Z, I, D, B, _, V, N };
   void set_cv(uint8_t a, uint8_t b, uint16_t res);
   void set_zn(uint8_t a);
   void set_z(uint8_t a);
@@ -62,6 +64,10 @@ class CPU {
   void OAM_DMA(uint8_t addr_hi);
 
   // interrupts
+  bool do_nmi = false;
+  bool do_irq = false;
+  bool irq_levels[IRQType::Count] = {false};
+
   void NMI();
   void IRQ(bool brk = false);
 

@@ -199,9 +199,8 @@ void APU::tick() {
   }
 
   // Set IRQ
-  if (frame_interrupt_flag || dmc.interrupt_flag) {
-    nes.cpu.set_IRQ();
-  }
+  nes.cpu.set_irq(IRQType::APU_FRAME_COUNTER, frame_interrupt_flag);
+  nes.cpu.set_irq(IRQType::APU_DMC, dmc.interrupt_flag);
 }
 
 void APU::sample() {

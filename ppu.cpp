@@ -135,7 +135,7 @@ void PPU::write_PPUCTRL(uint8_t value) {
   uint8_t old_nmi = PPUCTRL.nmi;
   PPUCTRL.raw = value;
   if (PPUSTATUS.in_vblank == 1 && PPUCTRL.nmi == 1 && old_nmi == 0) {
-    nes.cpu.request_NMI();
+    nes.cpu.request_nmi();
   }
   temp_vram_addr.nt_select = PPUCTRL.nt_addr;
 }
@@ -197,7 +197,7 @@ void PPU::tick() {
   } else if (scanline == 241 && scanline_cycle == 1) {
     PPUSTATUS.in_vblank = 1;
     if (PPUCTRL.nmi == 1) {
-      nes.cpu.request_NMI();
+      nes.cpu.request_nmi();
     }
   } else if (scanline == 261) {
     render_scanline();
@@ -252,6 +252,12 @@ void PPU::reload_shift_registers() {
 void PPU::render_scanline() {
   if (!rendering_enabled() || scanline_cycle == 0) {
     return;
+  }
+
+  if (scanline_cycle == 260) {
+    // TODO: This is a hack for mapper 4, instead of fully simulating sprite
+    // memory read timing
+    nes.cartridge.signal_scanline();
   }
 
   // Sprite pipeline

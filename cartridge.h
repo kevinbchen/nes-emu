@@ -4,6 +4,8 @@
 #include <vector>
 #include "ppu.h"
 
+class NES;
+
 struct ROMData {
   char header[16];
   std::vector<uint8_t> pgr_rom;
@@ -12,6 +14,7 @@ struct ROMData {
 
 class Mapper {
  public:
+  NES* nes = nullptr;
   std::vector<uint8_t> pgr_rom;
   std::vector<uint8_t> chr_rom;
   uint8_t pgr_ram[0x2000];  // 8kb
@@ -34,13 +37,16 @@ class Mapper {
 
   void set_pgr_map(uint16_t bank_size, uint8_t from_bank, uint8_t to_bank);
   void set_chr_map(uint16_t bank_size, uint8_t from_bank, uint8_t to_bank);
+  void set_nes(NES* nes);
+  virtual void signal_scanline() {}
 };
 
 class Cartridge {
  public:
+  NES& nes;
   std::unique_ptr<Mapper> mapper;
 
-  Cartridge() {}
+  Cartridge(NES& nes) : nes(nes) {}
   bool load(const char* filename);
 
   uint8_t mem_read(uint16_t addr);
@@ -49,4 +55,5 @@ class Cartridge {
   void chr_mem_write(uint16_t addr, uint8_t value);
 
   MirrorMode get_mirror_mode();
+  void signal_scanline();
 };

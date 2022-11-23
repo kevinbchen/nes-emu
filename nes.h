@@ -15,7 +15,7 @@ class NES {
   Joypad joypad;
   bool loaded = false;
 
-  NES() : cpu(*this), ppu(*this), apu(*this) {}
+  NES() : cpu(*this), ppu(*this), apu(*this), cartridge(*this) {}
   void load(const char* filename);
   void run_frame();
 };
