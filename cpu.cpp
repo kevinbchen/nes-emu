@@ -574,13 +574,16 @@ void CPU::ROR_A(uint16_t addr) {
 
 void CPU::RTI(uint16_t addr) {
   PLP(addr);
-  PC = stack_pop() | (stack_pop() << 8);
+  PC = stack_pop();
+  PC |= stack_pop() << 8;
 }
 
 void CPU::RTS(uint16_t addr) {
   tick();
   tick();
-  PC = (stack_pop() | (stack_pop() << 8)) + 1;
+  PC = stack_pop();
+  PC |= stack_pop() << 8;
+  PC += 1;
   tick();
 }
 
