@@ -2,17 +2,17 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include "nes.h"
+#include "nes/nes.h"
 
 int main(int argc, char* agv[]) {
   NES nes;
-  nes.load("roms/nestest.nes");
+  nes.load("assets/nestest.nes");
 
   CPU& cpu = nes.cpu;
   cpu.PC = 0xC000;
 
   // Load nestest.log
-  std::ifstream log_file("roms/nestest.log");
+  std::ifstream log_file("assets/nestest.log");
   std::string log_line;
 
   printf("Running nestest.nes\n\n");

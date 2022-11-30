@@ -1,6 +1,6 @@
 #pragma once
 #include <SDL.h>
-#include "nes.h"
+#include "nes/nes.h"
 
 class Audio {
  public:

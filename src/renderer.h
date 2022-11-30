@@ -6,7 +6,7 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <vector>
-#include "nes.h"
+#include "nes/nes.h"
 
 class Renderer {
  public:

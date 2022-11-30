@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include "audio.h"
-#include "nes.h"
+#include "nes/nes.h"
 #include "renderer.h"
 
 #ifdef __EMSCRIPTEN__
@@ -41,7 +41,7 @@ int main(int argc, char* agv[]) {
     return -1;
   }
 
-  nes.load("roms/nestest.nes");
+  nes.load("assets/nestest.nes");
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(&loop, 0, 1);
