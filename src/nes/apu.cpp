@@ -227,7 +227,7 @@ void APU::sample() {
   float pulse_out = pulse_table[pulse_index];
   float tnd_out = tnd_table[tnd_index];
   if (sample_count < max_output_buffer_size) {
-    output_buffer[sample_count++] = (pulse_out + tnd_out) * INT16_MAX;
+    output_buffer[sample_count++] = (pulse_out + tnd_out) * max_volume;
   }
 }
 
@@ -238,6 +238,10 @@ void APU::clear_output_buffer() {
 void APU::set_sample_rate(int rate) {
   sample_rate = rate;
   cycles_per_sample = (float)cpu_rate / sample_rate;
+}
+
+void APU::set_volume(int16_t volume) {
+  max_volume = volume;
 }
 
 void LengthCounter::load(uint8_t index) {

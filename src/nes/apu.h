@@ -149,6 +149,7 @@ class APU {
   void power_on();
   void clear_output_buffer();
   void set_sample_rate(int rate);
+  void set_volume(int16_t volume);
 
   uint8_t port_read(uint16_t addr);
   void port_write(uint16_t addr, uint8_t value);
@@ -162,6 +163,7 @@ class APU {
   float sample_cycle = 0;
   int sample_rate;
   float cycles_per_sample;
+  int16_t max_volume = INT16_MAX;
 
   void sample();
 

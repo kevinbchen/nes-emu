@@ -87,6 +87,7 @@ class Renderer {
   bool gamepad_states[(int)Button::Count] = {false};
 
   void render_controls();
+  void render_audio_settings();
   void init_input_bindings();
   void poll_joystick();
   void set_joypad_state();

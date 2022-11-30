@@ -99,6 +99,7 @@ void Renderer::render() {
     ImGui::Text("Drag and drop to load a ROM file");
     ImGui::Text("");
     render_controls();
+    render_audio_settings();
   }
   ImGui::End();
 
@@ -367,6 +368,16 @@ void Renderer::render_controls() {
         }
       }
       ImGui::EndTable();
+    }
+  }
+}
+
+void Renderer::render_audio_settings() {
+  if (ImGui::CollapsingHeader("Audio Settings",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    static float volume = 1.0f;
+    if (ImGui::SliderFloat("Volume", &volume, 0, 1.0f)) {
+      nes.apu.set_volume(volume * INT16_MAX);
     }
   }
 }
