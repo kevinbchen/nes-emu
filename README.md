@@ -10,8 +10,7 @@
 
 See the [Accuracy](#accuracy) and [TODO](#todo) sections for details about limitations.
 
-![nes-emu](https://user-images.githubusercontent.com/2881968/203748696-5cde5829-fbdc-45d0-9e29-3dc83cb8f5dd.png)
-
+![nes-emu](https://user-images.githubusercontent.com/2881968/204781437-3d91b014-ea14-4aaa-a1a9-3b599d956190.png)
 
 ## Building
 
