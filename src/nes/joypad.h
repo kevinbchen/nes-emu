@@ -1,7 +1,17 @@
 #pragma once
 #include <cstdint>
 
-enum class Button : int { A = 0, B, Select, Start, Up, Down, Left, Right };
+enum class Button : int {
+  A = 0,
+  B,
+  Select,
+  Start,
+  Up,
+  Down,
+  Left,
+  Right,
+  Count
+};
 
 class Joypad {
  public:

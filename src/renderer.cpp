@@ -1,10 +1,9 @@
 #include "renderer.h"
 #include <cstdio>
-#include <unordered_map>
+#include "glfw_keycodes.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "nes/joypad.h"
 
 namespace {
 
@@ -52,13 +51,6 @@ float transform_matrix[][4] = {
 uint8_t nametable_pixels[480][512][3];
 uint8_t pattern_table_pixels[128][256][3];
 
-std::unordered_map<int, Button> button_mapping{
-    {GLFW_KEY_Z, Button::A},         {GLFW_KEY_X, Button::B},
-    {GLFW_KEY_ENTER, Button::Start}, {GLFW_KEY_SPACE, Button::Select},
-    {GLFW_KEY_UP, Button::Up},       {GLFW_KEY_DOWN, Button::Down},
-    {GLFW_KEY_LEFT, Button::Left},   {GLFW_KEY_RIGHT, Button::Right},
-};
-
 ImVec2 uv(float px, float py) {
   return ImVec2(px / texture_size, py / texture_size);
 }
@@ -92,12 +84,7 @@ void Renderer::render() {
   if (ImGui::Begin("Help", nullptr, window_flags)) {
     ImGui::Text("Drag and drop to load a ROM file");
     ImGui::Text("");
-    ImGui::Text("Controls:");
-    ImGui::BulletText("[Arrow Keys] - DPAD");
-    ImGui::BulletText("[Z] - A");
-    ImGui::BulletText("[X] - B");
-    ImGui::BulletText("[Enter] - Start");
-    ImGui::BulletText("[Space] - Select");
+    render_controls();
   }
   ImGui::End();
 
@@ -160,6 +147,8 @@ bool Renderer::init() {
   glfwSwapInterval(1);
 
   glfwSetWindowUserPointer(window, this);
+
+  init_input_bindings();
   auto key_callback = [](GLFWwindow* window, int key, int scancode, int action,
                          int mods) {
     static_cast<Renderer*>(glfwGetWindowUserPointer(window))
@@ -322,13 +311,61 @@ void Renderer::update_texture() {
   set_pixels(&pattern_table_pixels[0][0][0], 0, 256, 256, 128);
 }
 
+void Renderer::init_input_bindings() {
+  input_mapping.clear();
+  for (int i = 0; i < (int)Button::Count; i++) {
+    input_mapping[input_bindings[i].glfw_key] = &input_bindings[i];
+  }
+}
+
+void Renderer::render_controls() {
+  if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+    for (int i = 0; i < (int)Button::Count; i++) {
+      InputBinding& input_binding = input_bindings[i];
+
+      constexpr int button_width = 150;
+      if (i == remapping_binding) {
+        if (ImGui::Button("Enter new key...", ImVec2(button_width, 0))) {
+          remapping_binding = -1;
+        }
+      } else {
+        if (ImGui::Button(KeyCodeToString((KeyCode)input_binding.glfw_key),
+                          ImVec2(button_width, 0))) {
+          remapping_binding = i;
+        }
+      }
+      ImGui::SameLine();
+      ImGui::Text("%s", input_binding.name);
+    }
+  }
+}
+
 void Renderer::key_callback(int key, int scancode, int action, int mods) {
   // TODO: Move out of renderer?
-  if (action == GLFW_PRESS || action == GLFW_RELEASE) {
-    auto it = button_mapping.find(key);
-    if (it != button_mapping.end()) {
-      Button button = it->second;
-      nes.joypad.set_button_state(0, button, action == GLFW_PRESS);
+  if (remapping_binding != -1) {
+    if (action == GLFW_PRESS) {
+      if (key == GLFW_KEY_ESCAPE) {
+        remapping_binding = -1;
+      } else {
+        InputBinding& input_binding = input_bindings[remapping_binding];
+        printf("Rebinding %s to %s\n", input_binding.name,
+               KeyCodeToString((KeyCode)key));
+
+        // If key is already used in another binding, swap keys
+        auto it = input_mapping.find(key);
+        if (it != input_mapping.end()) {
+          it->second->glfw_key = input_binding.glfw_key;
+        }
+        input_binding.glfw_key = key;
+        remapping_binding = -1;
+        init_input_bindings();
+      }
+    }
+  } else if (action == GLFW_PRESS || action == GLFW_RELEASE) {
+    auto it = input_mapping.find(key);
+    if (it != input_mapping.end()) {
+      nes.joypad.set_button_state(0, it->second->nes_button,
+                                  action == GLFW_PRESS);
     }
   }
 }

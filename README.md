@@ -35,7 +35,7 @@ The project *should* be cross-platform for linux and mac too, though I've person
 
 To load a rom, simply drag-and-drop the file into the window.
 
-The controls are currently hardcoded:
+The controls can be remapped, but the defaults are:
 
 | Keyboard    | NES Button  |
 | ----------- | ----------- |
