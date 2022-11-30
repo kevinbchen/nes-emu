@@ -55,10 +55,24 @@ ImVec2 uv(float px, float py) {
   return ImVec2(px / texture_size, py / texture_size);
 }
 
+#ifdef __EMSCRIPTEN__
+const char* gamepad_button_strings[] = {
+    "A",     "B",   "X",   "Y",  "LB",   "RB",   "LT",    "RT",    "Back",
+    "Start", "LSB", "RSB", "Up", "Down", "Left", "Right", "Guide",
+};
+#else
+const char* gamepad_button_strings[] = {
+    "A",     "B",   "X",   "Y",  "LB",    "RB",   "Back", "Start",
+    "Guide", "LSB", "RSB", "Up", "Right", "Down", "Left",
+};
+#endif
+
 }  // namespace
 
 void Renderer::render() {
   glfwPollEvents();
+  poll_joystick();
+  set_joypad_state();
 
   // Update texture from NES data
   update_texture();
@@ -320,52 +334,112 @@ void Renderer::init_input_bindings() {
 
 void Renderer::render_controls() {
   if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-    for (int i = 0; i < (int)Button::Count; i++) {
-      InputBinding& input_binding = input_bindings[i];
+    if (ImGui::BeginTable("Controls Table", 3)) {
+      ImGui::TableSetupColumn("NES");
+      ImGui::TableSetupColumn("Keyboard");
+      ImGui::TableSetupColumn("Gamepad");
+      ImGui::TableHeadersRow();
 
-      constexpr int button_width = 150;
-      if (i == remapping_binding) {
-        if (ImGui::Button("Enter new key...", ImVec2(button_width, 0))) {
-          remapping_binding = -1;
-        }
-      } else {
-        if (ImGui::Button(KeyCodeToString((KeyCode)input_binding.glfw_key),
-                          ImVec2(button_width, 0))) {
-          remapping_binding = i;
+      for (int i = 0; i < (int)Button::Count; i++) {
+        InputBinding& input_binding = input_bindings[i];
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", input_binding.name);
+
+        constexpr int button_width = 75;
+        const char* labels[] = {
+            KeyCodeToString((KeyCode)input_binding.glfw_key),
+            gamepad_button_strings[input_binding.gamepad_button],
+        };
+        for (int j = 0; j < 2; j++) {
+          ImGui::TableNextColumn();
+          int index = i + j * (int)Button::Count;
+          ImGui::PushID(index);
+          if (index == remapping_binding) {
+            if (ImGui::Button("...", ImVec2(button_width, 0))) {
+              remapping_binding = -1;
+            }
+          } else {
+            if (ImGui::Button(labels[j], ImVec2(button_width, 0))) {
+              remapping_binding = index;
+            }
+          }
+          ImGui::PopID();
         }
       }
-      ImGui::SameLine();
-      ImGui::Text("%s", input_binding.name);
+      ImGui::EndTable();
     }
   }
 }
 
-void Renderer::key_callback(int key, int scancode, int action, int mods) {
-  // TODO: Move out of renderer?
-  if (remapping_binding != -1) {
-    if (action == GLFW_PRESS) {
-      if (key == GLFW_KEY_ESCAPE) {
-        remapping_binding = -1;
-      } else {
-        InputBinding& input_binding = input_bindings[remapping_binding];
-        printf("Rebinding %s to %s\n", input_binding.name,
-               KeyCodeToString((KeyCode)key));
+void Renderer::poll_joystick() {
+#ifdef __EMSCRIPTEN__
+  EmscriptenGamepadEvent event;
+  emscripten_sample_gamepad_data();
+  if (emscripten_get_gamepad_status(0, &event) != EMSCRIPTEN_RESULT_SUCCESS) {
+    return;
+  }
+  EM_BOOL* buttons = event.digitalButton;
+  constexpr int num_buttons = 17;
+#else
+  if (!glfwJoystickIsGamepad(GLFW_JOYSTICK_1)) {
+    return;
+  }
+  GLFWgamepadstate state;
+  if (!glfwGetGamepadState(GLFW_JOYSTICK_1, &state)) {
+    return;
+  }
+  unsigned char* buttons = state.buttons;
+  constexpr int num_buttons = GLFW_GAMEPAD_BUTTON_LAST + 1;
+#endif
 
-        // If key is already used in another binding, swap keys
-        auto it = input_mapping.find(key);
-        if (it != input_mapping.end()) {
-          it->second->glfw_key = input_binding.glfw_key;
-        }
-        input_binding.glfw_key = key;
+  if (remapping_binding >= (int)Button::Count) {
+    for (int i = 0; i < num_buttons; i++) {
+      if (buttons[i]) {
+        InputBinding& input_binding =
+            input_bindings[remapping_binding - (int)Button::Count];
+        printf("Rebinding %s to gamepad button %s\n", input_binding.name,
+               gamepad_button_strings[i]);
+        input_binding.gamepad_button = i;
         remapping_binding = -1;
-        init_input_bindings();
+        break;
       }
     }
+  } else {
+    for (int i = 0; i < (int)Button::Count; i++) {
+      InputBinding& input_binding = input_bindings[i];
+      gamepad_states[(int)input_binding.nes_button] =
+          (bool)buttons[input_binding.gamepad_button];
+    }
+  }
+}
+
+void Renderer::set_joypad_state() {
+  for (int i = 0; i < (int)Button::Count; i++) {
+    nes.joypad.set_button_state(0, (Button)i,
+                                key_states[i] || gamepad_states[i]);
+  }
+}
+
+void Renderer::key_callback(int key, int scancode, int action, int mods) {
+  if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE) {
+    remapping_binding = -1;
+  }
+  if (remapping_binding >= 0 && remapping_binding < (int)Button::Count) {
+    InputBinding& input_binding = input_bindings[remapping_binding];
+    printf("Rebinding %s to key %s\n", input_binding.name,
+           KeyCodeToString((KeyCode)key));
+    // If key is already used in another binding, swap keys
+    auto it = input_mapping.find(key);
+    if (it != input_mapping.end()) {
+      it->second->glfw_key = input_binding.glfw_key;
+    }
+    input_binding.glfw_key = key;
+    remapping_binding = -1;
+    init_input_bindings();
   } else if (action == GLFW_PRESS || action == GLFW_RELEASE) {
     auto it = input_mapping.find(key);
     if (it != input_mapping.end()) {
-      nes.joypad.set_button_state(0, it->second->nes_button,
-                                  action == GLFW_PRESS);
+      key_states[(int)it->second->nes_button] = (action == GLFW_PRESS);
     }
   }
 }

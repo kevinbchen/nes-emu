@@ -37,13 +37,13 @@ To load a rom, simply drag-and-drop the file into the window.
 
 The controls can be remapped, but the defaults are:
 
-| Keyboard    | NES Button  |
-| ----------- | ----------- |
-| Arrow keys  | DPAD        |
-| Z           | A           |
-| X           | B           |
-| Enter       | Start       |
-| Space       | Select      |
+| NES         | Keyboard    | Gamepad     |
+| ----------- | ----------- | ----------- |
+| DPAD        | Arrow keys  | DPAD        |
+| A           | Z           | A           |
+| B           | X           | B           |
+| Start       | Enter       | Start       |
+| Select      | Space       | Back        |
 
 ## Accuracy
 
